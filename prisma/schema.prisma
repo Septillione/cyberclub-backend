@@ -1,0 +1,68 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  MANAGER
+  ADMIN
+}
+
+enum TournamentStatus {
+  announced
+  registrationOpened
+  registrationClosed
+  live
+  finished
+  cancelled
+}
+
+model User {
+  id                String   @id @default(uuid())
+  nickname          String   @unique
+  email             String   @unique
+  passwordHash      String
+  avatarUrl         String?
+  tournamentsPlayed Int      @default(0)
+  tournamentsWon    Int      @default(0)
+  winrate           Float    @default(0.0)
+  role              UserRole @default(USER)
+  
+  createdAt         DateTime @default(now())
+}
+
+model Tournament {
+  id                  String           @id @default(uuid())
+  title               String
+  imageUrl            String
+  discipline          String
+  prizePool           Int
+  type                String           // 'Онлайн' или 'Офлайн'
+  address             String?
+  format              String           // 'Single Elimination'
+  formatVersus        String           // '5v5'
+  description         String
+  rules               String
+  startDate           DateTime
+  status              TournamentStatus @default(announced)
+
+  currentParticipants Int              @default(0)
+  maxParticipants     Int
+  
+  prizeFirst          String?
+  prizeSecond         String?
+  prizeThird          String?
+
+  createdAt           DateTime         @default(now())
+}
