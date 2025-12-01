@@ -34,12 +34,13 @@ model User {
   email             String   @unique
   passwordHash      String
   avatarUrl         String?
+  bio               String?
   tournamentsPlayed Int      @default(0)
   tournamentsWon    Int      @default(0)
   winrate           Float    @default(0.0)
   role              UserRole @default(USER)
-  
   createdAt         DateTime @default(now())
+  hashRt            String?
 }
 
 model Tournament {
@@ -48,21 +49,18 @@ model Tournament {
   imageUrl            String
   discipline          String
   prizePool           Int
-  type                String           // 'Онлайн' или 'Офлайн'
+  type                String // 'Онлайн' или 'Офлайн'
   address             String?
-  format              String           // 'Single Elimination'
-  formatVersus        String           // '5v5'
+  format              String // 'Single Elimination'
+  formatVersus        String // '5v5'
   description         String
   rules               String
   startDate           DateTime
   status              TournamentStatus @default(announced)
-
   currentParticipants Int              @default(0)
   maxParticipants     Int
-  
   prizeFirst          String?
   prizeSecond         String?
   prizeThird          String?
-
   createdAt           DateTime         @default(now())
 }
