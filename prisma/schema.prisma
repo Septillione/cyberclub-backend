@@ -19,6 +19,26 @@ enum UserRole {
   ADMIN
 }
 
+enum Discipline {
+  DOTA2
+  CS2
+  VALORANT
+  LEAGUE_OF_LEGENDS
+  FORTNITE
+  CALL_OF_DUTY_WARZONE
+  WORLD_OF_TANKS
+  PUBG
+  APEX_LEGENDS
+  WARFACE
+  FIFA
+  OVERWATCH2
+  CLASH_ROYALE
+  BRAWL_STARS
+  STARCRAFT2
+  MORTAL_KOMBAT
+  TETRIS
+}
+
 enum TournamentStatus {
   ANNOUNCED
   REGISTRATION_OPEN
@@ -28,6 +48,20 @@ enum TournamentStatus {
   CANCELLED
 }
 
+enum BracketType {
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+  SWISS
+}
+
+enum TeamMode {
+  SOLO_1V1
+  DUO_2V2
+  TEAM_5V5
+  SQUAD
+}
+
 enum EntryStatus {
   PENDING
   APPROVED
@@ -35,40 +69,74 @@ enum EntryStatus {
 }
 
 model User {
-  id                String   @id @default(uuid())
-  nickname          String   @unique
-  email             String   @unique
-  passwordHash      String
-  role              UserRole @default(USER)
-
-  avatarUrl         String?
-  bio               String?
-  hashedRt          String?
-
-  entries           TournamentEntry[]
-  createdTournaments  Tournament[]
-
-  createdAt         DateTime @default(now())
+  id                 String            @id @default(uuid())
+  nickname           String            @unique
+  email              String            @unique
+  passwordHash       String
+  role               UserRole          @default(USER)
+  avatarUrl          String?
+  bio                String?
+  hashedRt           String?
+  entries            TournamentEntry[]
+  createdTournaments Tournament[]
+  createdAt          DateTime          @default(now())
+  teamsOwned         Team[]            @relation("TeamOwner")
+  teamMember         TeamMember[]
 }
 
 model Tournament {
-  id                  String           @id @default(uuid())
-  title               String
-  imageUrl            String
-  discipline          String
-  prizePool           Int
-  type                String // 'Онлайн' или 'Офлайн'
-  address             String?
-  format              String // 'Single Elimination'
-  formatVersus        String // '5v5'
-  description         String
-  rules               String
-  startDate           DateTime
-  status              TournamentStatus @default(announced)
-  currentParticipants Int              @default(0)
-  maxParticipants     Int
-  prizeFirst          String?
-  prizeSecond         String?
-  prizeThird          String?
-  createdAt           DateTime         @default(now())
+  id              String            @id @default(uuid())
+  title           String
+  description     String
+  rules           String
+  imageUrl        String
+  discipline      Discipline        @default(DOTA2)
+  bracketType     BracketType       @default(SINGLE_ELIMINATION) @map("bracket_type")
+  teamMode        TeamMode          @default(TEAM_5V5) @map("team_mode")
+  status          TournamentStatus  @default(ANNOUNCED)
+  startDate       DateTime
+  maxParticipants Int
+  prizePoolString String?
+  prizesJson      Json?
+  address         String?
+  isOnline        Boolean           @default(true)
+  creatorId       String?
+  creator         User?             @relation(fields: [creatorId], references: [id])
+  entries         TournamentEntry[]
+  createdAt       DateTime          @default(now())
+}
+
+model TournamentEntry {
+  id           String      @id @default(uuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+  tournamentId String
+  tournament   Tournament  @relation(fields: [tournamentId], references: [id])
+  status       EntryStatus @default(PENDING)
+  registeredAt DateTime    @default(now())
+
+  @@unique([userId, tournamentId])
+}
+
+model Team {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  tag         String       @unique
+  avatarUrl   String?
+  description String?
+  ownerId     String
+  owner       User         @relation("TeamOwner", fields: [ownerId], references: [id])
+  members     TeamMember[]
+  createdAt   DateTime     @default(now())
+}
+
+model TeamMember {
+  id       String   @id @default(uuid())
+  teamId   String
+  team     Team     @relation(fields: [teamId], references: [id])
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  joinedAt DateTime @default(now())
+
+  @@unique([teamId, userId])
 }

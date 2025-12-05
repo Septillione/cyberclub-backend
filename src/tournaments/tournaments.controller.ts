@@ -1,5 +1,6 @@
-import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Post } from '@nestjs/common';
 import { TournamentsService } from './tournaments.service';
+import { CreateTournamentDto } from './dto/create-tournament.dto';
 
 @Controller('tournaments')
 export class TournamentsController {
@@ -18,5 +19,10 @@ export class TournamentsController {
       throw new NotFoundException('Турнир не найден');
     }
     return tournament;
+  }
+
+  @Post()
+  create(@Body() dto: CreateTournamentDto) {
+    return this.tournamentsService.create(dto);
   }
 }
