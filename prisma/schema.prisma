@@ -20,12 +20,18 @@ enum UserRole {
 }
 
 enum TournamentStatus {
-  announced
-  registrationOpened
-  registrationClosed
-  live
-  finished
-  cancelled
+  ANNOUNCED
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  LIVE
+  FINISHED
+  CANCELLED
+}
+
+enum EntryStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model User {
@@ -33,14 +39,16 @@ model User {
   nickname          String   @unique
   email             String   @unique
   passwordHash      String
+  role              UserRole @default(USER)
+
   avatarUrl         String?
   bio               String?
-  tournamentsPlayed Int      @default(0)
-  tournamentsWon    Int      @default(0)
-  winrate           Float    @default(0.0)
-  role              UserRole @default(USER)
+  hashedRt          String?
+
+  entries           TournamentEntry[]
+  createdTournaments  Tournament[]
+
   createdAt         DateTime @default(now())
-  hashRt            String?
 }
 
 model Tournament {
