@@ -14,6 +14,6 @@ async function bootstrap() {
   }));
 
   await app.listen(3000);
-  console.log('Application is running on: http://cctournaments.ccmanager.ru/api/v1');
+  console.log('Application is running on: https://cctournaments.ccmanager.ru/api/v1');
 }
 bootstrap();

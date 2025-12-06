@@ -15,7 +15,7 @@ export class AuthService {
 
     // Генерация пары токенов
     async getTokens(userId: string, email: string, role: string) {
-        const payload = { sub: userId, email, role };
+        const payload = { sub: userId, email, role: role };
 
         const [at, rt] = await Promise.all([
             this.jwtService.signAsync(payload, {
@@ -40,7 +40,7 @@ export class AuthService {
         const hash = await bcrypt.hash(rt, 10);
         await this.prisma.user.update({
             where: { id: userId },
-            data: { hashRt: hash }
+            data: { hashedRt: hash }
         })
     }
 
@@ -93,8 +93,8 @@ export class AuthService {
     // Выход пользователя
     async logout(userId: string) {
         await this.prisma.user.updateMany({
-            where: { id: userId, hashRt: { not: null } },
-            data: { hashRt: null },
+            where: { id: userId, hashedRt: { not: null } },
+            data: { hashedRt: null },
         });
         return { message: 'Вы успешно вышли' };
     }
@@ -107,9 +107,9 @@ export class AuthService {
             });
 
             const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-            if (!user || !user.hashRt) throw new ForbiddenException('Доступ запрещен');
+            if (!user || !user.hashedRt) throw new ForbiddenException('Доступ запрещен');
 
-            const rtMatches = await bcrypt.compare(refreshToken, user.hashRt);
+            const rtMatches = await bcrypt.compare(refreshToken, user.hashedRt);
             if (!rtMatches) throw new ForbiddenException('Доступ запрещен');
 
             const tokens = await this.getTokens(user.id, user.email, user.role);
