@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTeamDto } from './dto/create-team.dto';
 
@@ -30,5 +30,46 @@ export class TeamsService {
                 _count: { select: { members: true } }
             }
         })
+    }
+
+    async findOne(id: string) {
+        return this.prisma.team.findUnique({
+            where: { id },
+            include: {
+                owner: { select: { id: true, nickname: true, avatarUrl: true } },
+                members: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                nickname: true,
+                                avatarUrl: true
+                            }
+                        }
+                    }
+                },
+                _count: { select: { members: true } }
+            }
+        });
+    }
+
+    async joinTeam(userId: string, teamId: string) {
+        const existing = await this.prisma.teamMember.findUnique({
+            where: { teamId_userId: { teamId, userId } }
+        });
+        if (existing) throw new ConflictException('Вы уже состоите в этой команде');
+
+        return this.prisma.teamMember.create({
+            data: {
+                userId,
+                teamId,
+            }
+        });
+    }
+
+    async leaveTeam(userId: string, teamId: string) {
+        return this.prisma.teamMember.delete({
+            where: { teamId_userId: { teamId, userId } }
+        });
     }
 }
