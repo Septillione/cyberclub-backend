@@ -10,6 +10,29 @@ export class TournamentsService {
     }
     constructor(private prisma: PrismaService) { }
 
+    private mapTournamentDto(t: any) {
+        return {
+            id: t.id,
+            title: t.title,
+            imageUrl: t.imageUrl,
+            discipline: t.discipline,
+            status: t.status,
+            bracketType: t.bracketType,
+            teamMode: t.teamMode,
+            prizePool: t.prizePoolString,
+            type: t.isOnline ? 'Онлайн' : 'Офлайн',
+            address: t.address,
+            description: t.description,
+            rules: t.rules,
+            startDate: t.startDate.toISOString(),
+            participants: {
+                current: t._count.entries,
+                max: t.maxParticipants,
+            },
+            prizes: t.prizesJson || {},
+        };
+    }
+
     async createTournament(dto: CreateTournamentDto) {
         return this.prisma.tournament.create({
             data: {
@@ -42,26 +65,7 @@ export class TournamentsService {
             }
         });
 
-        return tournaments.map(t => ({
-            id: t.id,
-            title: t.title,
-            imageUrl: t.imageUrl,
-            discipline: t.discipline,
-            status: t.status,
-            bracketType: t.bracketType,
-            teamMode: t.teamMode,
-            prizePool: t.prizePoolString,
-            type: t.isOnline ? 'Онлайн' : 'Офлайн',
-            address: t.address,
-            description: t.description,
-            rules: t.rules,
-            startDate: t.startDate.toISOString(),
-            participants: {
-                current: t._count.entries,
-                max: t.maxParticipants,
-            },
-            prizes: t.prizesJson || {},
-        }));
+        return tournaments.map(this.mapTournamentDto);
     }
 
     async findOne(id: string) {
@@ -97,5 +101,23 @@ export class TournamentsService {
             },
             prizes: t.prizesJson || {},
         }
+    }
+
+    async findUserTournaments(userId: string) {
+        const tournaments = await this.prisma.tournament.findMany({
+            where: {
+                entries: {
+                    some: { userId: userId }
+                }
+            },
+            include: {
+                _count: {
+                    select: { entries: true }
+                }
+            },
+            orderBy: { startDate: 'desc' }
+        });
+
+        return tournaments.map(this.mapTournamentDto);
     }
 }

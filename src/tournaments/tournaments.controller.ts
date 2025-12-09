@@ -1,6 +1,7 @@
-import { Body, Controller, Get, NotFoundException, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { TournamentsService } from './tournaments.service';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
+import { AtGuard } from 'src/auth/guards/at.guard';
 
 @Controller('tournaments')
 export class TournamentsController {
@@ -24,5 +25,12 @@ export class TournamentsController {
   @Post()
   create(@Body() dto: CreateTournamentDto) {
     return this.tournamentsService.create(dto);
+  }
+
+  @UseGuards(AtGuard)
+  @Get('my')
+  findMyTournaments(@Req() req) {
+    const userId = req.user['sub'];
+    return this.tournamentsService.findUserTournaments(userId);
   }
 }
