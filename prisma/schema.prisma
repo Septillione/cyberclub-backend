@@ -68,6 +68,12 @@ enum EntryStatus {
   REJECTED
 }
 
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id                 String            @id @default(uuid())
   nickname           String            @unique
@@ -82,6 +88,7 @@ model User {
   createdAt          DateTime          @default(now())
   teamsOwned         Team[]            @relation("TeamOwner")
   teamMember         TeamMember[]
+  joinRequests       JoinRequest[]
 }
 
 model Tournament {
@@ -128,6 +135,7 @@ model Team {
   owner       User         @relation("TeamOwner", fields: [ownerId], references: [id])
   members     TeamMember[]
   createdAt   DateTime     @default(now())
+  joinRequests JoinRequest[]
 }
 
 model TeamMember {
@@ -139,4 +147,16 @@ model TeamMember {
   joinedAt DateTime @default(now())
 
   @@unique([teamId, userId])
+}
+
+model JoinRequest {
+  id       String            @id @default(uuid())
+  userId   String
+  user     User              @relation(fields: [userId], references: [id])
+  teamId   String
+  team     Team              @relation(fields: [teamId], references: [id])
+  status   JoinRequestStatus @default(PENDING)
+  createAt DateTime          @default(now())
+
+  @@unique([userId, teamId])
 }

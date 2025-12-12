@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTeamDto } from './dto/create-team.dto';
 
@@ -79,4 +79,49 @@ export class TeamsService {
             where: { teamId_userId: { teamId, userId } }
         });
     }
+
+    async findAll(search?: string) {
+        return this.prisma.team.findMany({
+            where: search ? {
+                OR: [
+                    { name: { contains: search, mode: 'insensitive' } },
+                    { tag: { contains: search, mode: 'insensitive' } }
+                ]
+            } : undefined,
+            include: {
+                _count: { select: { members: true } }
+            }
+        });
+    }
+
+    // async requestJoin(userId: string, teamId: string) {
+    //     return this.prisma.joinRequest.create({
+    //         data: { userId, teamId }
+    //     })
+    // }
+
+    // async getRequest(teamId: string) {
+    //     return this.prisma.joinRequest.findMany({
+    //         where: { teamId, status: 'PENDING' },
+    //         include: { user: { select: { id: true, nickname: true, avatarUrl: true } } }
+    //     });
+    // }
+
+    // async acceptRequest(requestId: string, captainId: string) {
+    //     const request = await this.prisma.joinRequest.findUnique({
+    //         where: { id: requestId },
+    //         include: { team: true }
+    //     });
+    //     if (!request || request.team.ownerId !== captainId) throw new ForbiddenException();
+
+    //     return this.prisma.$transaction([
+    //         this.prisma.joinRequest.update({
+    //             where: { id: requestId },
+    //             data: { status: 'ACCEPTED' }
+    //         }),
+    //         this.prisma.teamMember.create({
+    //             data: { userId: request.userId, teamId: request.teamId }
+    //         })
+    //     ])
+    // }
 }
