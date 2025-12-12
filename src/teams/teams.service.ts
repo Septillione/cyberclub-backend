@@ -27,6 +27,13 @@ export class TeamsService {
                 members: { some: { userId: userId }, },
             },
             include: {
+                members: {
+                    include: {
+                        user: {
+                            select: { id: true, nickname: true, avatarUrl: true }
+                        }
+                    }
+                },
                 _count: { select: { members: true } }
             }
         })
