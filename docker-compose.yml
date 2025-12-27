@@ -1,17 +1,64 @@
+# version: '3.8'
+# services:
+#   db:
+#     image: postgres:15
+#     container_name: cyberclub_db
+#     restart: always
+#     ports:
+#       - "5432:5432"
+#     environment:
+#       POSTGRES_USER: admin
+#       POSTGRES_PASSWORD: root
+#       POSTGRES_DB: cyberclub
+#     volumes:
+#       - db_data:/var/lib/postgresql/data
+
+# volumes:
+#   db_data:
+
 version: '3.8'
+
 services:
-  db:
+  # === БАЗА ДАННЫХ ===
+  postgres:
     image: postgres:15
-    container_name: cyberclub_db
+    container_name: cc_db
     restart: always
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: root
       POSTGRES_DB: cyberclub
+    ports:
+      - "5432:5432" # Доступ с компа по localhost:5432
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin -d cyberclub" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # === БЭКЕНД ===
+  api:
+    build: .
+    container_name: cc_api
+    restart: always
+    ports:
+      - "3000:3000" # Доступ с компа по localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy # Ждем, пока база реально загрузится
+    environment:
+      # Внутренняя связь с контейнером postgres
+      DATABASE_URL: "postgresql://admin:root@postgres:5432/cyberclub?schema=public"
+      # Секреты
+      AT_SECRET: "my_dev_secret_at"
+      RT_SECRET: "my_dev_secret_rt"
+    # МАГИЯ ЗДЕСЬ:
+    # 1. Накатываем структуру БД (db push)
+    # 2. Запускаем сервер
+    command: >
+      sh -c "npx prisma db push && node dist/main"
 
 volumes:
-  db_data:
+  pg_data:

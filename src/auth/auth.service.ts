@@ -4,6 +4,7 @@ import { UsersService } from 'src/users/users.service';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from 'src/users/dto/create-user.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
@@ -11,6 +12,7 @@ export class AuthService {
         private usersService: UsersService,
         private jwtService: JwtService,
         private prisma: PrismaService,
+        private config: ConfigService,
     ) { }
 
     // Генерация пары токенов
@@ -19,12 +21,12 @@ export class AuthService {
 
         const [at, rt] = await Promise.all([
             this.jwtService.signAsync(payload, {
-                secret: 'AT_SECRET_KEY',
+                secret: this.config.get<string>('AT_SECRET'),
                 expiresIn: '15m',
             }),
 
             this.jwtService.signAsync(payload, {
-                secret: 'RT_SECRET_KEY',
+                secret: this.config.get<string>('RT_SECRET'),
                 expiresIn: '7d',
             }),
         ]);
@@ -103,7 +105,7 @@ export class AuthService {
     async refreshTokens(refreshToken: string) {
         try {
             const payload = await this.jwtService.verifyAsync(refreshToken, {
-                secret: 'RT_SECRET_KEY',
+                secret: this.config.get<string>('RT_SECRET'),
             });
 
             const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });

@@ -13,10 +13,6 @@ export class CreateUserDto {
     password: string;
 
     @IsOptional()
-    @IsString()
-    bio?: string;
-
-    @IsOptional()
     @IsEnum(['USER', 'MANAGER', 'ADMIN'])
     role?: 'USER' | 'MANAGER' | 'ADMIN';
 }

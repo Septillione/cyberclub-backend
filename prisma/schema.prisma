@@ -68,6 +68,12 @@ enum EntryStatus {
   REJECTED
 }
 
+enum JoinRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 model User {
   id                 String            @id @default(uuid())
   nickname           String            @unique
@@ -82,6 +88,7 @@ model User {
   createdAt          DateTime          @default(now())
   teamsOwned         Team[]            @relation("TeamOwner")
   teamMember         TeamMember[]
+  joinRequests       JoinRequest[]
 }
 
 model Tournament {
@@ -104,6 +111,7 @@ model Tournament {
   creator         User?             @relation(fields: [creatorId], references: [id])
   entries         TournamentEntry[]
   createdAt       DateTime          @default(now())
+  matches         Match[]
 }
 
 model TournamentEntry {
@@ -112,22 +120,26 @@ model TournamentEntry {
   user         User        @relation(fields: [userId], references: [id])
   tournamentId String
   tournament   Tournament  @relation(fields: [tournamentId], references: [id])
+  teamId       String?
+  team         Team?       @relation(fields: [teamId], references: [id])
   status       EntryStatus @default(PENDING)
   registeredAt DateTime    @default(now())
 
-  @@unique([userId, tournamentId])
+  @@unique([userId, tournamentId, teamId])
 }
 
 model Team {
-  id          String       @id @default(uuid())
-  name        String       @unique
-  tag         String       @unique
-  avatarUrl   String?
-  description String?
-  ownerId     String
-  owner       User         @relation("TeamOwner", fields: [ownerId], references: [id])
-  members     TeamMember[]
-  createdAt   DateTime     @default(now())
+  id           String            @id @default(uuid())
+  name         String            @unique
+  tag          String            @unique
+  avatarUrl    String?
+  description  String?
+  ownerId      String
+  owner        User              @relation("TeamOwner", fields: [ownerId], references: [id])
+  members      TeamMember[]
+  entries      TournamentEntry[]
+  createdAt    DateTime          @default(now())
+  joinRequests JoinRequest[]
 }
 
 model TeamMember {
@@ -139,4 +151,32 @@ model TeamMember {
   joinedAt DateTime @default(now())
 
   @@unique([teamId, userId])
+}
+
+model JoinRequest {
+  id       String            @id @default(uuid())
+  userId   String
+  user     User              @relation(fields: [userId], references: [id])
+  teamId   String
+  team     Team              @relation(fields: [teamId], references: [id])
+  status   JoinRequestStatus @default(PENDING)
+  createAt DateTime          @default(now())
+
+  @@unique([userId, teamId])
+}
+
+model Match {
+  id           String     @id @default(uuid())
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+  round        Int
+  position     Int
+  participant1 String?
+  participant2 String?
+  score1       Int        @default(0)
+  score2       Int        @default(0)
+  winnerId     String?
+  nextMatchId  String?
+  nextMatch    Match?     @relation("NextMatch", fields: [nextMatchId], references: [id])
+  prevMatches  Match[]    @relation("NextMatch")
 }
