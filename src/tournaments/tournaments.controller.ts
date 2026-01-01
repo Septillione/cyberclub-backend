@@ -1,17 +1,19 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { TournamentsService } from './tournaments.service';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { AtGuard } from 'src/auth/guards/at.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JoinTournamentDto } from './dto/join-tournament.dto';
+import { UpdateMatchDto } from './dto/update-match.dto';
+import { FitlerTournamentsDto } from './dto/filter-tournaments.dto';
 
 @Controller('tournaments')
 export class TournamentsController {
   constructor(private readonly tournamentsService: TournamentsService) { }
 
   @Get()
-  async findAll() {
-    const items = await this.tournamentsService.findAll();
+  async findAll(@Query() filters: FitlerTournamentsDto) {
+    const items = await this.tournamentsService.findAll(filters);
     return { items: items };
   }
 
@@ -51,6 +53,22 @@ export class TournamentsController {
   start(@Req() req, @Param('id') tournamentId: string) {
     const userId = req.user['sub'];
     return this.tournamentsService.startTournament(tournamentId, userId);
+  }
+
+  @UseGuards(AtGuard)
+  @Roles('MANAGER', 'ADMIN')
+  @Post(':id/finish')
+  finish(@Req() req, @Param('id') tournamentId: string) {
+    const userId = req.user['sub'];
+    return this.tournamentsService.finishTournament(tournamentId, userId);
+  }
+
+  @UseGuards(AtGuard)
+  @Roles('MANAGER', 'ADMIN')
+  @Post('matches/:id')
+  updateMatch(@Req() req, @Param('id') matchId: string, @Body() dto: UpdateMatchDto) {
+    const userId = req.user['sub'];
+    return this.tournamentsService.updateMatch(matchId, userId, dto.score1, dto.score2);
   }
 
   @UseGuards(AtGuard)

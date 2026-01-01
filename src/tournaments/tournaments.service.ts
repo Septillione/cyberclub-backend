@@ -2,6 +2,9 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { match } from 'assert';
+import * as crypto from 'crypto';
+import { FitlerTournamentsDto } from './dto/filter-tournaments.dto';
+
 
 @Injectable()
 export class TournamentsService {
@@ -51,8 +54,21 @@ export class TournamentsService {
         })
     }
 
-    async findAll() {
+    async findAll(filters: FitlerTournamentsDto) {
+
+        const { discipline, status, teamMode, search } = filters;
+
+        const where: any = {};
+
+        if (discipline) where.discipline = discipline;
+        if (status) where.status = status;
+        if (teamMode) where.teamMode = teamMode;
+        if (search) {
+            where.title = { contains: search, mode: 'insensitive' };
+        }
+
         const tournaments = await this.prisma.tournament.findMany({
+            where: where,
             include: { _count: { select: { entries: true } } },
             orderBy: { startDate: 'asc' }
         });
@@ -224,53 +240,102 @@ export class TournamentsService {
             rouandNumber++;
         }
 
+        for (let r = 0; r < createdMatches.length - 1; r++) {
+            const currentRound = createdMatches[r];
+            const nextRound = createdMatches[r + 1];
 
+            for (const match of currentRound) {
+                const nextMatchPos = Math.floor(match.position / 2);
+                const nextMatch = nextRound.find(m => m.position === nextMatchPos);
+
+                if (nextMatch) {
+                    match.nextMatchId = nextMatch.id;
+                }
+            }
+        }
+
+        const allMatchesFlat = createdMatches.flat();
+
+        for (let r = createdMatches.length - 1; r >= 0; r--) {
+            dbOperaions.push(
+                this.prisma.match.createMany({ data: createdMatches[r] })
+            );
+        }
+
+        await this.prisma.$transaction(dbOperaions);
+
+        return { message: 'Турнир запущен, полная сетка создана' };
     }
 
-    // async startTournament(tournamentId: string, userId: string) {
-    //     const tournament = await this.prisma.tournament.findUnique({
-    //         where: { id: tournamentId },
-    //         include: { entries: { include: { user: true, team: true } } }
-    //     });
+    async updateMatch(matchId: string, userId: string, score1: number, score2: number) {
+        // 1. Ищем матч и проверяем права
+        const match = await this.prisma.match.findUnique({
+            where: { id: matchId },
+            include: { tournament: true }
+        });
 
-    //     if (!tournament) throw new NotFoundException('Турнир не найден');
-    //     if (tournament.creatorId !== userId) throw new ForbiddenException('Только организатор может начать турнир');
-    //     if (tournament.status == 'LIVE' || tournament.status == 'FINISHED') throw new BadRequestException('Турнир уже идет или завершён');
-    //     if (tournament.entries.length < 2) throw new BadRequestException('Недостаточно участников (минимум 2)');
+        if (!match) throw new NotFoundException('Матч не найден');
+        // Проверка: менять счет может только создатель
+        if (match.tournament.creatorId !== userId) throw new ForbiddenException('Нет прав');
+        if (match.tournament.status === 'FINISHED') throw new BadRequestException('Турнир завершен, счет изменять нельзя')
 
-    //     let participants: (string | null)[] = tournament.entries.map(e => {
-    //         return e.team ? e.team.name : e.user.nickname;
-    //     });
+        // 2. Определяем победителя
+        // ВАЖНО: Мы используем имена (строки), так как в базе у нас participant1/participant2 - это строки
+        let winnerName: string | null = null;
 
-    //     participants = this.shuffle(participants);
+        if (score1 > score2) {
+            winnerName = match.participant1;
+        } else if (score2 > score1) {
+            winnerName = match.participant2;
+        }
+        // Если ничья (score1 == score2), победителя нет, winnerName остается null
 
-    //     let powerOfTwo = 2;
-    //     while (powerOfTwo < participants.length) powerOfTwo *= 2;
-    //     while (participants.length < powerOfTwo) participants.push(null);
+        const ops: any[] = [];
 
-    //     const matchesData: any[] = [];
+        // 3. Обновляем ТЕКУЩИЙ матч (записываем счет и победителя)
+        ops.push(this.prisma.match.update({
+            where: { id: matchId },
+            data: { score1, score2, winnerId: winnerName }
+        }));
 
-    //     for (let i = 0; i < participants.length; i += 2) {
-    //         matchesData.push({
-    //             tournamentId: tournamentId,
-    //             round: 1,
-    //             position: i / 2,
-    //             participant1: participants[i],
-    //             participant2: participants[i + 1],
-    //             score1: 0,
-    //             score2: 0,
-    //         });
-    //     }
+        // 4. ПРОДВИГАЕМ ПОБЕДИТЕЛЯ (Самая важная часть!)
+        // Если победитель определен И есть куда идти (nextMatchId не null)
+        if (winnerName && match.nextMatchId) {
 
-    //     await this.prisma.$transaction([
-    //         this.prisma.tournament.update({
-    //             where: { id: tournamentId },
-    //             data: { status: 'LIVE' },
-    //         }),
-    //         this.prisma.match.createMany({
-    //             data: matchesData,
-    //         })
-    //     ]);
-    //     return { message: 'Турнир запущен, сетка создана' };
-    // }
+            // Логика:
+            // Если позиция матча четная (0, 2, 4...) -> победитель идет в слот 1 (верхний) следующего матча
+            // Если позиция матча нечетная (1, 3, 5...) -> победитель идет в слот 2 (нижний) следующего матча
+            const isSlot1 = (match.position % 2 === 0);
+
+            const updateData = isSlot1
+                ? { participant1: winnerName }
+                : { participant2: winnerName };
+
+            // Добавляем операцию обновления СЛЕДУЮЩЕГО матча
+            ops.push(this.prisma.match.update({
+                where: { id: match.nextMatchId },
+                data: updateData
+            }));
+        }
+
+        // Выполняем всё вместе
+        await this.prisma.$transaction(ops);
+
+        return { message: 'Счет обновлен, сетка пересчитана' };
+    }
+
+    async finishTournament(tournamentId: string, userId: string) {
+        const tournament = await this.prisma.tournament.findUnique({
+            where: { id: tournamentId },
+        });
+
+        if (!tournament) throw new NotFoundException('Турнир не найден');
+        if (tournament.creatorId !== userId) throw new ForbiddenException('Только организатор может завершить турнир');
+        if (tournament.status !== 'LIVE') throw new BadRequestException('Турнир не запущен');
+
+        return this.prisma.tournament.update({
+            where: { id: tournamentId },
+            data: { status: 'FINISHED' },
+        });
+    }
 }

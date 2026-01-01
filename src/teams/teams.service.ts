@@ -48,7 +48,7 @@ export class TeamsService {
     }
 
     async findOne(id: string) {
-        return this.prisma.team.findUnique({
+        const team = await this.prisma.team.findUnique({
             where: { id },
             include: {
                 owner: { select: { id: true, nickname: true, avatarUrl: true } },
@@ -57,9 +57,57 @@ export class TeamsService {
                         user: { select: { id: true, nickname: true, avatarUrl: true } }
                     }
                 },
-                _count: { select: { members: true } }
+                _count: { select: { members: true } },
+                entries: {
+                    include: {
+                        tournament: {
+                            include: {
+                                _count: { select: { entries: true } }
+                            }
+                        }
+                    },
+                    orderBy: {
+                        registeredAt: 'desc',
+                    }
+                }
             }
         });
+
+        if (!team) return null;
+
+        const mappedEntries = team.entries.map((entry) => {
+            const t = entry.tournament;
+            return {
+                ...entry,
+                tournament: {
+                    id: t.id,
+                    title: t.title,
+                    imageUrl: t.imageUrl,
+                    discipline: t.discipline,
+                    status: t.status,
+                    bracketType: t.bracketType,
+                    teamMode: t.teamMode,
+                    isOnline: t.isOnline,
+                    address: t.address,
+                    description: t.description,
+                    rules: t.rules,
+                    startDate: t.startDate.toISOString(),
+                    participants: {
+                        current: t._count.entries,
+                        max: t.maxParticipants,
+                    },
+                    prizes: t.prizesJson || [],
+                    entries: [],
+                    matches: [],
+                    creatorId: t.creatorId
+                }
+            }
+        });
+
+        return {
+            ...team,
+            entries: mappedEntries
+        };
     }
 
     // Поиск команд (для экрана поиска)
