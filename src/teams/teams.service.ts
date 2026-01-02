@@ -1,11 +1,12 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTeamDto } from './dto/create-team.dto';
-import { JoinRequestStatus } from '@prisma/client';
+import { JoinRequestStatus, TypeNotification } from '@prisma/client';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class TeamsService {
-    constructor(private prisma: PrismaService) { }
+    constructor(private prisma: PrismaService, private notifications: NotificationsService) { }
 
     async create(userId: string, dto: CreateTeamDto) {
         // Проверка на уникальность имени/тега
@@ -144,9 +145,21 @@ export class TeamsService {
             throw new ConflictException('Заявка уже отправлена');
         }
 
-        return this.prisma.joinRequest.create({
-            data: { userId, teamId }
-        })
+        const request = await this.prisma.joinRequest.create({ data: { userId, teamId } });
+        const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+        if (team) {
+            await this.notifications.sendNotification(
+                team.ownerId,
+                'Новая заявка',
+                `Игрок ${user?.nickname} хочет вступить в команду`,
+                TypeNotification.INVITE,
+                { teamId: team.id }
+            );
+        }
+
+        return request;
     }
 
     async getRequests(teamId: string) {
@@ -214,81 +227,3 @@ export class TeamsService {
         return this.prisma.teamMember.create({ data: { userId, teamId } });
     }
 }
-
-
-
-// import { ConflictException, Injectable } from '@nestjs/common';
-// import { PrismaService } from 'src/prisma/prisma.service';
-// import { CreateTeamDto } from './dto/create-team.dto';
-
-// @Injectable()
-// export class TeamsService {
-//     constructor(private prisma: PrismaService,) { }
-
-//     async create(userId: string, dto: CreateTeamDto) {
-//         return this.prisma.team.create({
-//             data: {
-//                 name: dto.name,
-//                 tag: dto.tag,
-//                 avatarUrl: dto.avatarUrl,
-//                 ownerId: userId,
-//                 members: {
-//                     create: { userId: userId },
-//                 },
-//             },
-//             include: { members: { include: { user: true } }, },
-//         });
-//     }
-
-//     async findAllMyTeams(userId: string) {
-//         return this.prisma.team.findMany({
-//             where: {
-//                 members: { some: { userId: userId }, },
-//             },
-//             include: {
-//                 _count: { select: { members: true } }
-//             }
-//         })
-//     }
-
-//     async findOne(id: string) {
-//         return this.prisma.team.findUnique({
-//             where: { id },
-//             include: {
-//                 owner: { select: { id: true, nickname: true, avatarUrl: true } },
-//                 members: {
-//                     include: {
-//                         user: {
-//                             select: {
-//                                 id: true,
-//                                 nickname: true,
-//                                 avatarUrl: true
-//                             }
-//                         }
-//                     }
-//                 },
-//                 _count: { select: { members: true } }
-//             }
-//         });
-//     }
-
-//     async joinTeam(userId: string, teamId: string) {
-//         const existing = await this.prisma.teamMember.findUnique({
-//             where: { teamId_userId: { teamId, userId } }
-//         });
-//         if (existing) throw new ConflictException('Вы уже состоите в этой команде');
-
-//         return this.prisma.teamMember.create({
-//             data: {
-//                 userId,
-//                 teamId,
-//             }
-//         });
-//     }
-
-//     async leaveTeam(userId: string, teamId: string) {
-//         return this.prisma.teamMember.delete({
-//             where: { teamId_userId: { teamId, userId } }
-//         });
-//     }
-// }

@@ -74,6 +74,12 @@ enum JoinRequestStatus {
   REJECTED
 }
 
+enum TypeNotification {
+  INVITE
+  MATCH
+  SYSTEM
+}
+
 model User {
   id                 String            @id @default(uuid())
   nickname           String            @unique
@@ -89,6 +95,8 @@ model User {
   teamsOwned         Team[]            @relation("TeamOwner")
   teamMember         TeamMember[]
   joinRequests       JoinRequest[]
+  fcmToken           String?
+  notifications      Notification[]
 }
 
 model Tournament {
@@ -179,4 +187,16 @@ model Match {
   nextMatchId  String?
   nextMatch    Match?     @relation("NextMatch", fields: [nextMatchId], references: [id])
   prevMatches  Match[]    @relation("NextMatch")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  title     String
+  body      String
+  type      TypeNotification @default(SYSTEM)
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
 }

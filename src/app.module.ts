@@ -8,9 +8,10 @@ import { AuthModule } from './auth/auth.module';
 import { PrismaService } from './prisma/prisma.service';
 import { TeamsModule } from './teams/teams.module';
 import { ConfigModule } from '@nestjs/config';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, UsersModule, TournamentsModule, AuthModule, TeamsModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, UsersModule, TournamentsModule, AuthModule, TeamsModule, NotificationsModule],
   controllers: [AppController],
   providers: [AppService, PrismaService],
 })
