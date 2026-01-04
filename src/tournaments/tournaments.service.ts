@@ -56,21 +56,36 @@ export class TournamentsService {
 
     async findAll(filters: FitlerTournamentsDto) {
 
-        const { discipline, status, teamMode, search } = filters;
+        const { discipline, status, teamMode, search, isOnline, sortOrder } = filters;
 
         const where: any = {};
 
         if (discipline) where.discipline = discipline;
         if (status) where.status = status;
         if (teamMode) where.teamMode = teamMode;
+        if (isOnline !== undefined) where.isOnline = isOnline;
         if (search) {
             where.title = { contains: search, mode: 'insensitive' };
+        }
+
+        let orderBy: any = { startDate: 'asc' };
+
+        if (sortOrder === 'NEWEST') {
+            orderBy = { startDate: 'desc' };
+        } else if (sortOrder === 'OLDEST') {
+            orderBy = { startDate: 'asc' };
+        } else if (sortOrder === 'POPULAR') {
+            orderBy = {
+                entries: {
+                    _count: 'desc'
+                }
+            };
         }
 
         const tournaments = await this.prisma.tournament.findMany({
             where: where,
             include: { _count: { select: { entries: true } } },
-            orderBy: { startDate: 'asc' }
+            orderBy: orderBy,
         });
         return tournaments.map(this.mapTournamentDto);
     }
