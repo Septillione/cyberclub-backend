@@ -21,6 +21,9 @@ export class TeamsService {
             data: {
                 name: dto.name,
                 tag: dto.tag,
+                description: dto.description,
+                socialMedia: dto.socialMedia,
+                gamesList: dto.gamesList,
                 avatarUrl: dto.avatarUrl,
                 ownerId: userId,
                 // Сразу добавляем создателя в список участников

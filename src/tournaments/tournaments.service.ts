@@ -25,11 +25,13 @@ export class TournamentsService {
             rules: t.rules,
             startDate: t.startDate.toISOString(),
             participants: {
-                current: t._count.entries,
+                current: t._count?.entries ?? 0,
                 max: t.maxParticipants,
             },
             prizes: t.prizesJson || {},
             creatorId: t.creatorId,
+            matches: t.matches || [],
+            entries: t.entries || [],
         };
     }
 
@@ -84,7 +86,20 @@ export class TournamentsService {
 
         const tournaments = await this.prisma.tournament.findMany({
             where: where,
-            include: { _count: { select: { entries: true } } },
+            include: {
+                _count: {
+                    select: {
+                        entries: true
+                    }
+                },
+                matches: true,
+                entries: {
+                    include: {
+                        user: true,
+                        team: true,
+                    },
+                }
+            },
             orderBy: orderBy,
         });
         return tournaments.map(this.mapTournamentDto);
@@ -130,14 +145,28 @@ export class TournamentsService {
             prizes: t.prizesJson || {},
             entries: t.entries,
             matches: t.matches,
-            creatorId: t.creatorId
+            creatorId: t.creatorId,
+            createdAt: t.createdAt.toISOString(),
         }
     }
 
     async findUserTournaments(userId: string) {
         const tournaments = await this.prisma.tournament.findMany({
             where: { entries: { some: { userId: userId } } },
-            include: { _count: { select: { entries: true } } },
+            include: {
+                _count: {
+                    select: {
+                        entries: true
+                    }
+                },
+                matches: true,
+                entries: {
+                    include: {
+                        user: true,
+                        team: true,
+                    }
+                }
+            },
             orderBy: { startDate: 'desc' }
         });
         return tournaments.map(this.mapTournamentDto);

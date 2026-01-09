@@ -142,6 +142,8 @@ model Team {
   tag          String            @unique
   avatarUrl    String?
   description  String?
+  socialMedia  String?
+  gamesList    String[]
   ownerId      String
   owner        User              @relation("TeamOwner", fields: [ownerId], references: [id])
   members      TeamMember[]
