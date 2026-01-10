@@ -40,6 +40,8 @@ services:
 
   # === БЭКЕНД ===
   api:
+    volumes:
+      - ./uploads:/app/uploads
     build: .
     container_name: cc_api
     restart: always
