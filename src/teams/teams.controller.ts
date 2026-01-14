@@ -47,6 +47,12 @@ export class TeamsController {
   }
 
   @UseGuards(AtGuard)
+  @Post(':id/delete')
+  deleteTeam(@Req() req, @Param('id') teamId: string) {
+    return this.teamsService.deleteTeam(req.user['sub'], teamId);
+  }
+
+  @UseGuards(AtGuard)
   @Post(':id/request')
   requestJoin(@Req() req, @Param('id') teamId: string) {
     const userId = req.user['sub']

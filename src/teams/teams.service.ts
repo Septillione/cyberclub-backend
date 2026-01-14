@@ -223,6 +223,24 @@ export class TeamsService {
         });
     }
 
+    async deleteTeam(userId: string, teamId: string) {
+        const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+
+        if (!team) {
+            throw new NotFoundException('Команда не найдена');
+        }
+
+        if (team.ownerId !== userId) {
+            throw new ForbiddenException('Только капитан может удалить команду');
+        }
+
+        await this.prisma.$transaction([
+            this.prisma.joinRequest.deleteMany({ where: { teamId } }),
+            this.prisma.teamMember.deleteMany({ where: { teamId } }),
+            this.prisma.team.delete({ where: { id: teamId } }),
+        ])
+    }
+
     // Метод joinTeam (прямой вход) мы убираем или оставляем для тестов, 
     // так как у нас есть система заявок (requestJoin).
     // Если хочешь оставить "мгновенный вход" для отладки:

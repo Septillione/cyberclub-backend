@@ -15,7 +15,10 @@ export class UploadsController {
             },
         }),
         fileFilter: (req, file, cb) => {
-            if (!file.originalname.match(/\.(jpg|jpeg|png)$/)) {
+            // if (!file.originalname.match(/\.(jpg|jpeg|png)$/)) {
+            //     return cb(new BadRequestException('Only image files are allowed!'), false);
+            // }
+            if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
                 return cb(new BadRequestException('Only image files are allowed!'), false);
             }
             cb(null, true);
