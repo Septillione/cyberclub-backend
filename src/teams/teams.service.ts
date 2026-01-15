@@ -3,6 +3,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { JoinRequestStatus, TypeNotification } from '@prisma/client';
 import { NotificationsService } from 'src/notifications/notifications.service';
+import { UpdateTeamDto } from './dto/update-team.dto';
 
 @Injectable()
 export class TeamsService {
@@ -246,5 +247,50 @@ export class TeamsService {
     // Если хочешь оставить "мгновенный вход" для отладки:
     async joinTeam(userId: string, teamId: string) {
         return this.prisma.teamMember.create({ data: { userId, teamId } });
+    }
+
+    async inviteUser(captainId: string, teamId: string, targetUserId: string) {
+        const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+        if (!team) throw new NotFoundException('Команда не найдена');
+        if (team.ownerId !== captainId) throw new ForbiddenException('Только капитан может приглашать');
+
+        const existingMember = await this.prisma.teamMember.findUnique({
+            where: { teamId_userId: { teamId, userId: targetUserId } }
+        });
+        if (existingMember) throw new ConflictException('Игрок уже в команде');
+
+        await this.notifications.sendNotification(
+            targetUserId,
+            'Приглашение в команду',
+            `Вы были приглашены в команду ${team.name}`,
+            'INVITE',
+            { teamId: team.id }
+        );
+
+        return { message: 'Приглашение отправлено' };
+    }
+
+    async updateTeam(userId: string, teamId: string, dto: UpdateTeamDto) {
+        const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+
+        if (!team) {
+            throw new NotFoundException('Команда не найдена');
+        }
+
+        if (team.ownerId !== userId) {
+            throw new ForbiddenException('Только капитан может обновлять информацию о команде');
+        }
+
+        return this.prisma.team.update({
+            where: { id: teamId },
+            data: {
+                name: dto.name,
+                tag: dto.tag,
+                avatarUrl: dto.avatarUrl,
+                description: dto.description,
+                socialMedia: dto.socialMedia,
+                gamesList: dto.gamesList,
+            }
+        })
     }
 }

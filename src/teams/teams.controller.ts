@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { TeamsService } from './teams.service';
 import { AtGuard } from 'src/auth/guards/at.guard';
 import { CreateTeamDto } from './dto/create-team.dto';
+import { UpdateTeamDto } from './dto/update-team.dto';
 
 @Controller('teams')
 export class TeamsController {
@@ -31,6 +32,18 @@ export class TeamsController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.teamsService.findOne(id);
+  }
+
+  @UseGuards(AtGuard)
+  @Patch(':id')
+  update(@Req() req, @Param('id') id: string, @Body() dto: UpdateTeamDto) {
+    return this.teamsService.updateTeam(req.user['sub'], id, dto);
+  }
+
+  @UseGuards(AtGuard)
+  @Post(':id/invite')
+  inviteUser(@Req() req, @Param('id') teamId: string, @Body('userId') targetUserId: string) {
+    return this.teamsService.inviteUser(req.user['sub'], teamId, targetUserId);
   }
 
   // Временный прямой вход (если нужен)
