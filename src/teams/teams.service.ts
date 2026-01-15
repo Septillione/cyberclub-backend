@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { JoinRequestStatus, TypeNotification } from '@prisma/client';
@@ -180,6 +180,17 @@ export class TeamsService {
         });
         if (!request || request.team.ownerId !== captainId) throw new ForbiddenException('Только капитан может принимать заявки');
 
+        const team = await this.prisma.team.findUnique({
+            where: { id: request.teamId },
+            include: {
+                members: true
+            },
+        })
+
+        if (!team) throw new NotFoundException('Команда не найдена');
+
+        if (team.members.length >= 10) throw new BadRequestException('Команда переполнена');
+
         return this.prisma.$transaction([
             this.prisma.joinRequest.update({
                 where: { id: requestId },
@@ -250,7 +261,7 @@ export class TeamsService {
     }
 
     async inviteUser(captainId: string, teamId: string, targetUserId: string) {
-        const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+        const team = await this.prisma.team.findUnique({ where: { id: teamId }, include: { members: true } });
         if (!team) throw new NotFoundException('Команда не найдена');
         if (team.ownerId !== captainId) throw new ForbiddenException('Только капитан может приглашать');
 
@@ -258,6 +269,8 @@ export class TeamsService {
             where: { teamId_userId: { teamId, userId: targetUserId } }
         });
         if (existingMember) throw new ConflictException('Игрок уже в команде');
+
+        if (team.members.length >= 10) throw new BadRequestException('Команда переполнена');
 
         await this.notifications.sendNotification(
             targetUserId,

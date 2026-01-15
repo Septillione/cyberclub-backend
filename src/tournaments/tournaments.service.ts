@@ -181,7 +181,7 @@ export class TournamentsService {
         return tournaments.map(this.mapTournamentDto);
     }
 
-    async joinTournament(tournamentId: string, userId: string, teamId?: string) {
+    async joinTournament(tournamentId: string, userId: string, teamId?: string, rosterIds?: string[]) {
         const tournament = await this.prisma.tournament.findUnique({
             where: { id: tournamentId },
             include: { entries: true }
@@ -205,6 +205,23 @@ export class TournamentsService {
                 where: { tournamentId, teamId }
             });
             if (teamEntry) throw new ConflictException('Эта команда уже участвует');
+
+            const requiredCount = tournament.teamMode === 'DUO_2V2' ? 2 : tournament.teamMode === 'SQUAD' ? 4 : 5;
+
+            if (!rosterIds || rosterIds.length !== requiredCount) {
+                throw new BadRequestException('Нужно выбрать ровно ${requiredCount} игроков');
+            }
+
+            const members = await this.prisma.teamMember.count({
+                where: {
+                    teamId,
+                    userId: { in: rosterIds }
+                }
+            });
+
+            if (members !== rosterIds.length) {
+                throw new BadRequestException('Выбраны игроки не из вашей команды');
+            }
         }
 
         return this.prisma.tournamentEntry.create({
@@ -212,6 +229,7 @@ export class TournamentsService {
                 tournamentId,
                 userId,
                 teamId: teamId || null,
+                rosterJson: rosterIds || [],
                 status: 'APPROVED',
             }
         });

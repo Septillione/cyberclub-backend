@@ -132,6 +132,7 @@ model TournamentEntry {
   team         Team?       @relation(fields: [teamId], references: [id])
   status       EntryStatus @default(PENDING)
   registeredAt DateTime    @default(now())
+  rosterJson   Json?
 
   @@unique([userId, tournamentId, teamId])
 }
