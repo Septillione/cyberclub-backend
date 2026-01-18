@@ -117,19 +117,27 @@ export class TeamsService {
 
     // Поиск команд (для экрана поиска)
     async findAll(search?: string) {
-        if (!search) return [];
+        if (search) {
 
+            return this.prisma.team.findMany({
+                where: {
+                    OR: [
+                        { name: { contains: search, mode: 'insensitive' } },
+                        { tag: { contains: search, mode: 'insensitive' } }
+                    ]
+                },
+                take: 10,
+                include: {
+                    _count: { select: { members: true } }
+                }
+            });
+        }
         return this.prisma.team.findMany({
-            where: {
-                OR: [
-                    { name: { contains: search, mode: 'insensitive' } },
-                    { tag: { contains: search, mode: 'insensitive' } }
-                ]
-            },
+            take: 10,
             include: {
                 _count: { select: { members: true } }
             }
-        });
+        })
     }
 
     // --- Логика заявок (Join Requests) ---

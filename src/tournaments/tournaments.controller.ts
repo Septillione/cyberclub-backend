@@ -26,6 +26,13 @@ export class TournamentsController {
   }
 
   @UseGuards(AtGuard)
+  @Roles('MANAGER', 'ADMIN')
+  @Get('statistics')
+  getAdminDashboardStats() {
+    return this.tournamentsService.getAdminDashboardStats();
+  }
+
+  @UseGuards(AtGuard)
   @Get('my')
   findMyTournaments(@Req() req) {
     const userId = req.user['sub'];

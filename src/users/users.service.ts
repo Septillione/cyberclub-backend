@@ -42,7 +42,17 @@ export class UsersService {
         select: { id: true, nickname: true, avatarUrl: true, bio: true }
       });
     }
-    return [];
+    return this.prisma.user.findMany(
+      {
+        take: 10,
+        select: {
+          id: true,
+          nickname: true,
+          avatarUrl: true,
+          bio: true,
+        }
+      }
+    );
     // return this.prisma.user.findMany();
   }
 

@@ -400,4 +400,67 @@ export class TournamentsService {
             data: { status: 'FINISHED' },
         });
     }
+
+    async getAdminDashboardStats() {
+        const totalTournaments = await this.prisma.tournament.count();
+        const liveTournaments = await this.prisma.tournament.count({
+            where: { status: 'LIVE' }
+        });
+        const openTournaments = await this.prisma.tournament.count({
+            where: { status: 'REGISTRATION_CLOSED' }
+        });
+
+        const totalUsers = await this.prisma.user.count();
+        const usersInTeams = await this.prisma.user.count({
+            where: {
+                teamMember: { some: {} }
+            }
+        });
+        const usersPlayingNow = await this.prisma.user.count({
+            where: {
+                OR: [
+                    {
+                        entries: {
+                            some: {
+                                tournament: { status: 'LIVE' }
+                            }
+                        }
+                    },
+                    {
+                        teamMember: {
+                            some: {
+                                team: {
+                                    entries: {
+                                        some: {
+                                            tournament: { status: 'LIVE' }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        });
+
+        const totalTeams = await this.prisma.team.count();
+        const activeTeams = await this.prisma.team.count({
+            where: {
+                entries: {
+                    some: {
+                        tournament: {
+                            status: 'LIVE'
+                        }
+                    }
+                }
+            }
+        });
+        const totalJoinRequests = await this.prisma.joinRequest.count();
+
+        return {
+            tournaments: { total: totalTournaments, live: liveTournaments, open: openTournaments },
+            users: { total: totalUsers, inTeams: usersInTeams, playingNow: usersPlayingNow },
+            teams: { total: totalTeams, active: activeTeams, joinRequests: totalJoinRequests },
+        }
+    }
 }
