@@ -401,6 +401,20 @@ export class TournamentsService {
         });
     }
 
+    async cancelTournament(tournamentId: string) {
+        return this.prisma.tournament.update({
+            where: {
+                id: tournamentId
+            },
+            data: {
+                status: 'CANCELLED',
+                entries: {
+                    deleteMany: {}
+                }
+            }
+        });
+    }
+
     async getAdminDashboardStats() {
         const totalTournaments = await this.prisma.tournament.count();
         const liveTournaments = await this.prisma.tournament.count({

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { TournamentsService } from './tournaments.service';
 import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { AtGuard } from 'src/auth/guards/at.guard';
@@ -68,6 +68,13 @@ export class TournamentsController {
   finish(@Req() req, @Param('id') tournamentId: string) {
     const userId = req.user['sub'];
     return this.tournamentsService.finishTournament(tournamentId, userId);
+  }
+
+  @UseGuards(AtGuard)
+  @Roles('MANAGER', 'ADMIN')
+  @Patch(':id/cancel')
+  cancel(@Req() req, @Param('id') tournamentId: string) {
+    return this.tournamentsService.cancelTournament(tournamentId);
   }
 
   @UseGuards(AtGuard)

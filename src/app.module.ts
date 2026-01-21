@@ -14,6 +14,8 @@ import { UploadsService } from './uploads/uploads.service';
 import { UploadsModule } from './uploads/uploads.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { AdminController } from './admin/admin.controller';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, UsersModule, TournamentsModule, AuthModule, TeamsModule, NotificationsModule, UploadsModule,
@@ -21,8 +23,9 @@ import { join } from 'path';
     rootPath: join(__dirname, '..', 'uploads'),
     serveRoot: '/uploads',
   }),
+    AdminModule,
   ],
-  controllers: [AppController, UploadsController],
+  controllers: [AppController, UploadsController, AdminController],
   providers: [AppService, PrismaService, UploadsService],
 })
 export class AppModule { }

@@ -37,7 +37,9 @@ export class TeamsController {
   @UseGuards(AtGuard)
   @Patch(':id')
   update(@Req() req, @Param('id') id: string, @Body() dto: UpdateTeamDto) {
-    return this.teamsService.updateTeam(req.user['sub'], id, dto);
+    const userId = req.user['sub'];
+    const userRole = req.user['role'];
+    return this.teamsService.updateTeam(userId, userRole, id, dto);
   }
 
   @UseGuards(AtGuard)

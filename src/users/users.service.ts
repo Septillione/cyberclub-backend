@@ -39,7 +39,7 @@ export class UsersService {
           nickname: { contains: search, mode: 'insensitive' }
         },
         take: 10,
-        select: { id: true, nickname: true, avatarUrl: true, bio: true }
+        select: { id: true, nickname: true, avatarUrl: true, bio: true, role: true }
       });
     }
     return this.prisma.user.findMany(
@@ -50,6 +50,7 @@ export class UsersService {
           nickname: true,
           avatarUrl: true,
           bio: true,
+          role: true,
         }
       }
     );

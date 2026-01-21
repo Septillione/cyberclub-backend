@@ -291,15 +291,24 @@ export class TeamsService {
         return { message: 'Приглашение отправлено' };
     }
 
-    async updateTeam(userId: string, teamId: string, dto: UpdateTeamDto) {
+    async updateTeam(userId: string, userRole: string, teamId: string, dto: UpdateTeamDto) {
         const team = await this.prisma.team.findUnique({ where: { id: teamId } });
 
         if (!team) {
             throw new NotFoundException('Команда не найдена');
         }
 
-        if (team.ownerId !== userId) {
-            throw new ForbiddenException('Только капитан может обновлять информацию о команде');
+        // if (team.ownerId !== userId) {
+        //     throw new ForbiddenException('Только капитан может обновлять информацию о команде');
+        // }
+
+        const isOwner = team.ownerId === userId;
+        const isAdmin = userRole === 'ADMIN';
+
+        if (!isOwner && !isAdmin) {
+            throw new ForbiddenException(
+                'У вас нет прав на редактирование этой команды'
+            );
         }
 
         return this.prisma.team.update({
@@ -312,6 +321,6 @@ export class TeamsService {
                 socialMedia: dto.socialMedia,
                 gamesList: dto.gamesList,
             }
-        })
+        });
     }
 }
