@@ -21,27 +21,27 @@ export class AdminController {
         });
     }
 
-    // @Patch('users/:id/ban')
-    // async banUser(@Param('id') userId: string, @Body('isBanned') isBanned: boolean) {
-    //     return this.prisma.user.update({
-    //         where: {
-    //             id: userId
-    //         },
-    //         data: {
-    //             isBanned
-    //         }
-    //     });
-    // }
+    @Patch('users/:id/ban')
+    async banUser(@Param('id') userId: string, @Body('isBanned') isBanned: boolean) {
+        return this.prisma.user.update({
+            where: {
+                id: userId
+            },
+            data: {
+                isBanned
+            }
+        });
+    }
 
-    // @Patch('teams/:id/ban')
-    // async banTeam(@Param('id') teamId: string, @Body('isBanned') isBanned: boolean) {
-    //     return this.prisma.team.update({
-    //         where: {
-    //             id: teamId
-    //         },
-    //         data: {
-    //             isBanned
-    //         }
-    //     });
-    // }
+    @Patch('teams/:id/ban')
+    async banTeam(@Param('id') teamId: string, @Body('isBanned') isBanned: boolean) {
+        return this.prisma.team.update({
+            where: {
+                id: teamId
+            },
+            data: {
+                isBanned
+            }
+        });
+    }
 }

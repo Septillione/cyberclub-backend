@@ -4,6 +4,7 @@ import { CreateTournamentDto } from './dto/create-tournament.dto';
 import { match } from 'assert';
 import * as crypto from 'crypto';
 import { FitlerTournamentsDto } from './dto/filter-tournaments.dto';
+import { UpdateTournamentDto } from './dto/update-tournament.dto';
 
 
 @Injectable()
@@ -475,6 +476,43 @@ export class TournamentsService {
             tournaments: { total: totalTournaments, live: liveTournaments, open: openTournaments },
             users: { total: totalUsers, inTeams: usersInTeams, playingNow: usersPlayingNow },
             teams: { total: totalTeams, active: activeTeams, joinRequests: totalJoinRequests },
+        }
+    }
+
+    async updateTournament(tournamentId: string, userId: string, userRole: string, dto: UpdateTournamentDto) {
+        const tournament = await this.prisma.tournament.findUnique({
+            where: { id: tournamentId },
+        });
+
+        if (!tournament) {
+            throw new NotFoundException('Турнир не найден');
+        }
+
+        if (userId !== tournament.creatorId && userRole !== 'MANAGER' && userRole !== 'ADMIN') {
+            throw new ForbiddenException('Только организатор может обновить турнир');
+        }
+
+        if (tournament.status === 'LIVE' && (dto.teamMode || dto.bracketType || dto.maxParticipants)) {
+            throw new BadRequestException('Нельзя менять формат активного турнира');
+        }
+
+        try {
+            const dataToUpdate: any = { ...dto };
+
+            if (dto.startDate) {
+                dataToUpdate.startDate = new Date(dto.startDate);
+            }
+
+            if (dto.prizes) {
+                dataToUpdate.prizesJson = dto.prizes;
+            }
+
+            return this.prisma.tournament.update({
+                where: { id: tournamentId },
+                data: dataToUpdate,
+            })
+        } catch (e) {
+            throw new BadRequestException('Ошибка обновления турнира: ' + e.message);
         }
     }
 }

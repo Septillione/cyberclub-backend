@@ -6,6 +6,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JoinTournamentDto } from './dto/join-tournament.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 import { FitlerTournamentsDto } from './dto/filter-tournaments.dto';
+import { UpdateTournamentDto } from './dto/update-tournament.dto';
 
 @Controller('tournaments')
 export class TournamentsController {
@@ -68,6 +69,15 @@ export class TournamentsController {
   finish(@Req() req, @Param('id') tournamentId: string) {
     const userId = req.user['sub'];
     return this.tournamentsService.finishTournament(tournamentId, userId);
+  }
+
+  @UseGuards(AtGuard)
+  @Roles('MANAGER', 'ADMIN')
+  @Patch(':id')
+  updateTournament(@Req() req, @Param('id') tournamentId: string, @Body() dto: UpdateTournamentDto) {
+    const userId = req.user['sub'];
+    const userRole = req.user['role'];
+    return this.tournamentsService.updateTournament(tournamentId, userId, userRole, dto)
   }
 
   @UseGuards(AtGuard)

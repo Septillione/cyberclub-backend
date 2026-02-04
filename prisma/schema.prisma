@@ -97,6 +97,7 @@ model User {
   joinRequests       JoinRequest[]
   fcmToken           String?
   notifications      Notification[]
+  isBanned           Boolean           @default(false)
 }
 
 model Tournament {
@@ -151,6 +152,7 @@ model Team {
   entries      TournamentEntry[]
   createdAt    DateTime          @default(now())
   joinRequests JoinRequest[]
+  isBanned     Boolean           @default(false)
 }
 
 model TeamMember {
