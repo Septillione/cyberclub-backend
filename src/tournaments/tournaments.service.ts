@@ -5,6 +5,7 @@ import { match } from 'assert';
 import * as crypto from 'crypto';
 import { FitlerTournamentsDto } from './dto/filter-tournaments.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
+import { title } from 'process';
 
 
 @Injectable()
@@ -61,48 +62,59 @@ export class TournamentsService {
 
         const { discipline, status, teamMode, search, isOnline, sortOrder } = filters;
 
+        console.log('--- START FILTER DEBUG ---');
+        console.log('Raw Filters received:', filters);
+
+
         const where: any = {};
 
         if (discipline) where.discipline = discipline;
         if (status) where.status = status;
         if (teamMode) where.teamMode = teamMode;
         if (isOnline !== undefined) where.isOnline = isOnline;
-        if (search) {
-            where.title = { contains: search, mode: 'insensitive' };
+
+        if (search && search.trim().length > 0) {
+            const cleanSearch = search.trim();
+
+            if (!where.AND) where.AND = [];
+
+            if (cleanSearch.length < 3) {
+                where.AND.push({
+                    title: { contains: cleanSearch, mode: 'insensitive' }
+                });
+            } else {
+                const trigrams: string[] = [];
+
+                for (let i = 0; i < cleanSearch.length - 2; i++) {
+                    trigrams.push(cleanSearch.substring(i, i + 3));
+                }
+
+                where.AND.push({
+                    OR: trigrams.map(chunk => ({
+                        title: { contains: chunk, mode: 'insensitive' }
+                    }))
+                });
+            }
         }
+
+        console.log('Constructed WHERE:', JSON.stringify(where, null, 2));
+        console.log('--- END FILTER DEBUG ---');
 
         let orderBy: any = { startDate: 'asc' };
-
-        if (sortOrder === 'NEWEST') {
-            orderBy = { startDate: 'desc' };
-        } else if (sortOrder === 'OLDEST') {
-            orderBy = { startDate: 'asc' };
-        } else if (sortOrder === 'POPULAR') {
-            orderBy = {
-                entries: {
-                    _count: 'desc'
-                }
-            };
-        }
+        if (sortOrder === 'NEWEST') orderBy = { startDate: 'desc' };
+        else if (sortOrder === 'OLDEST') orderBy = { startDate: 'asc' };
+        else if (sortOrder === 'POPULAR') orderBy = { entries: { _count: 'desc' } };
 
         const tournaments = await this.prisma.tournament.findMany({
             where: where,
             include: {
-                _count: {
-                    select: {
-                        entries: true
-                    }
-                },
+                _count: { select: { entries: true } },
                 matches: true,
-                entries: {
-                    include: {
-                        user: true,
-                        team: true,
-                    },
-                }
+                entries: { include: { user: true, team: true } }
             },
             orderBy: orderBy,
         });
+
         return tournaments.map(this.mapTournamentDto);
     }
 
@@ -387,6 +399,55 @@ export class TournamentsService {
         return { message: 'Счет обновлен, сетка пересчитана' };
     }
 
+    async disqualifyParticipant(matchId: string, userId: string, loserParticipant: number) {
+        const match = await this.prisma.match.findUnique({
+            where: { id: matchId },
+            include: { tournament: true }
+        });
+
+        if (!match) throw new NotFoundException('Матч не найден');
+        if (match.tournament.creatorId !== userId) throw new ForbiddenException('Нет прав');
+        if (match.tournament.status === 'FINISHED') throw new BadRequestException('Турнир завершен');
+        if (match.winnerId) throw new BadRequestException('У матча уже есть победитель');
+
+        let winnerName: string | null = null;
+        let score1 = 0;
+        let score2 = 0;
+
+        if (loserParticipant === 1) {
+            winnerName = match.participant2;
+            if (!winnerName) throw new BadRequestException('Нет второго участника');
+            score1 = 0;
+            score2 = 1;
+        } else {
+            winnerName = match.participant1;
+            if (!winnerName) throw new BadRequestException('Нет первого участника');
+            score1 = 1;
+            score2 = 0;
+        }
+
+        const ops: any[] = [];
+
+        ops.push(this.prisma.match.update({
+            where: { id: matchId },
+            data: { score1, score2, winnerId: winnerName },
+        }));
+
+        if (match.nextMatchId) {
+            const isSlot1 = (match.position % 2 == 0);
+            const updateData = isSlot1 ? { participant1: winnerName } : { participant2: winnerName };
+
+            ops.push(this.prisma.match.update({
+                where: { id: match.nextMatchId },
+                data: updateData,
+            }));
+        }
+
+        await this.prisma.$transaction(ops);
+
+        return { message: 'Участник дисквалифицирован, соперник прошел дальше' };
+    }
+
     async finishTournament(tournamentId: string, userId: string) {
         const tournament = await this.prisma.tournament.findUnique({
             where: { id: tournamentId },
@@ -505,6 +566,7 @@ export class TournamentsService {
 
             if (dto.prizes) {
                 dataToUpdate.prizesJson = dto.prizes;
+                delete dataToUpdate.prizes;
             }
 
             return this.prisma.tournament.update({

@@ -10,6 +10,16 @@ export class TeamsService {
     constructor(private prisma: PrismaService, private notifications: NotificationsService) { }
 
     async create(userId: string, dto: CreateTeamDto) {
+        const membershipCount = await this.prisma.teamMember.count({
+            where: { userId: userId }
+        });
+
+        if (membershipCount >= 3) {
+            throw new BadRequestException(
+                'Вы не можете быть участником более 3 команд'
+            );
+        }
+
         // Проверка на уникальность имени/тега
         const existing = await this.prisma.team.findFirst({
             where: {
@@ -117,32 +127,58 @@ export class TeamsService {
 
     // Поиск команд (для экрана поиска)
     async findAll(search?: string) {
-        if (search) {
+        const where: any = {};
 
-            return this.prisma.team.findMany({
-                where: {
-                    OR: [
-                        { name: { contains: search, mode: 'insensitive' } },
-                        { tag: { contains: search, mode: 'insensitive' } }
-                    ]
-                },
-                take: 10,
-                include: {
-                    _count: { select: { members: true } }
+        if (search && search.trim().length > 0) {
+            const cleanSearch = search.trim();
+
+            if (!where.AND) where.AND = [];
+
+            if (cleanSearch.length < 3) {
+                where.OR = [
+                    { name: { contains: cleanSearch, mode: 'insensitive' } },
+                    { tag: { contains: cleanSearch, mode: 'insensitive' } }
+                ]
+            } else {
+                const trigrams: string[] = [];
+
+                for (let i = 0; i < cleanSearch.length - 2; i++) {
+                    trigrams.push(cleanSearch.substring(i, i + 3));
                 }
-            });
+
+                const orConditions: any[] = [];
+
+                trigrams.forEach(chunk => {
+                    orConditions.push({ name: { contains: chunk, mode: 'insensitive' } });
+                    orConditions.push({ tag: { contains: chunk, mode: 'insensitive' } });
+                });
+
+                where.OR = orConditions;
+            }
         }
+
         return this.prisma.team.findMany({
-            take: 10,
+            where: where,
             include: {
                 _count: { select: { members: true } }
-            }
-        })
+            },
+            take: 20,
+        });
     }
 
     // --- Логика заявок (Join Requests) ---
 
     async requestJoin(userId: string, teamId: string) {
+
+        const membershipCount = await this.prisma.teamMember.count({
+            where: { userId: userId }
+        });
+
+        if (membershipCount >= 3) {
+            throw new BadRequestException('Вы достигли лимита в 3 команды. Покиньте одну, чтобы вступить в новую.');
+        }
+
+
         // Проверка: не состоит ли уже?
         const member = await this.prisma.teamMember.findUnique({
             where: { teamId_userId: { teamId, userId } }
@@ -187,6 +223,14 @@ export class TeamsService {
             include: { team: true }
         });
         if (!request || request.team.ownerId !== captainId) throw new ForbiddenException('Только капитан может принимать заявки');
+
+        const candidateMembersCount = await this.prisma.teamMember.count({
+            where: { userId: request.userId }
+        });
+
+        if (candidateMembersCount >= 3) {
+            throw new BadRequestException('У этого игрока уже максимальное количество команд');
+        }
 
         const team = await this.prisma.team.findUnique({
             where: { id: request.teamId },

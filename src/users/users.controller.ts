@@ -3,6 +3,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ChangePasswordDto, UpdateUserDto } from './dto/update-user.dto';
 import { AtGuard } from 'src/auth/guards/at.guard';
+import { BanGuard } from 'src/ban/guard/ban.guard';
 
 @Controller('users')
 export class UsersController {

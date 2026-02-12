@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nest
 import { NotificationsService } from './notifications.service';
 import { TokenExpiredError } from '@nestjs/jwt';
 import { AtGuard } from 'src/auth/guards/at.guard';
+import { BanGuard } from 'src/ban/guard/ban.guard';
 
 @Controller('notifications')
 export class NotificationsController {

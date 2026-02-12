@@ -3,6 +3,7 @@ import { TeamsService } from './teams.service';
 import { AtGuard } from 'src/auth/guards/at.guard';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
+import { TeamBanGuard } from 'src/ban/guard/team_ban.guard';
 
 @Controller('teams')
 export class TeamsController {
@@ -34,7 +35,7 @@ export class TeamsController {
     return this.teamsService.findOne(id);
   }
 
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, TeamBanGuard)
   @Patch(':id')
   update(@Req() req, @Param('id') id: string, @Body() dto: UpdateTeamDto) {
     const userId = req.user['sub'];

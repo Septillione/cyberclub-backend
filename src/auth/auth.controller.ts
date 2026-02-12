@@ -4,22 +4,26 @@ import { CreateUserDto } from 'src/users/dto/create-user.dto';
 import { AtGuard } from './guards/at.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
+import { Public } from './decorators/public.decorator';
 
 @Controller('auth')
 export class AuthController {
     constructor(private authService: AuthService) { }
 
+    @Public()
     @Post('register')
     signUp(@Body() dto: CreateUserDto) {
         return this.authService.signUp(dto);
     }
 
+    @Public()
     @HttpCode(HttpStatus.OK)
     @Post('login')
     signIn(@Body() dto: Record<string, any>) {
         return this.authService.signIn(dto.email, dto.password);
     }
 
+    @Public()
     @HttpCode(HttpStatus.OK)
     @Post('refresh')
     refresh(@Body() body: { refreshToken: string }) {

@@ -33,28 +33,31 @@ export class UsersService {
   }
 
   async findAll(search?: string) {
-    if (search) {
-      return this.prisma.user.findMany({
-        where: {
-          nickname: { contains: search, mode: 'insensitive' }
-        },
-        take: 10,
-        select: { id: true, nickname: true, avatarUrl: true, bio: true, role: true }
-      });
-    }
-    return this.prisma.user.findMany(
-      {
-        take: 10,
-        select: {
-          id: true,
-          nickname: true,
-          avatarUrl: true,
-          bio: true,
-          role: true,
+    const where: any = {};
+
+    if (search && search.trim().length > 0) {
+      const cleanSearch = search.trim();
+
+      if (cleanSearch.length < 3) {
+        where.nickname = { contains: cleanSearch, mode: 'insensitive' };
+      } else {
+        const trigrams: string[] = [];
+
+        for (let i = 0; i < cleanSearch.length - 2; i++) {
+          trigrams.push(cleanSearch.substring(i, i + 3));
         }
+
+        where.OR = trigrams.map(chunk => ({
+          nickname: { contains: chunk, mode: 'insensitive' }
+        }));
       }
-    );
-    // return this.prisma.user.findMany();
+    }
+
+    return this.prisma.user.findMany({
+      where: where,
+      select: { id: true, nickname: true, avatarUrl: true, bio: true, role: true },
+      take: 50,
+    });
   }
 
   async findOne(id: string) {

@@ -7,6 +7,8 @@ import { JoinTournamentDto } from './dto/join-tournament.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 import { FitlerTournamentsDto } from './dto/filter-tournaments.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
+import { BanGuard } from 'src/ban/guard/ban.guard';
+import { TeamBanGuard } from 'src/ban/guard/team_ban.guard';
 
 @Controller('tournaments')
 export class TournamentsController {
@@ -49,7 +51,7 @@ export class TournamentsController {
     return tournament;
   }
 
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, TeamBanGuard)
   @Post(':id/join')
   join(@Req() req, @Param('id') tournamentId: string, @Body() dto: JoinTournamentDto) {
     const userId = req.user['sub'];
@@ -93,6 +95,14 @@ export class TournamentsController {
   updateMatch(@Req() req, @Param('id') matchId: string, @Body() dto: UpdateMatchDto) {
     const userId = req.user['sub'];
     return this.tournamentsService.updateMatch(matchId, userId, dto.score1, dto.score2);
+  }
+
+  @UseGuards(AtGuard)
+  @Roles('MANAGER', 'ADMIN')
+  @Patch('matches/:id/disqualify')
+  disqualify(@Req() req, @Param('id') matchId: string, @Body('loserPosition') loserPosition: number) {
+    const userId = req.user['sub'];
+    return this.tournamentsService.disqualifyParticipant(matchId, userId, loserPosition);
   }
 
   @UseGuards(AtGuard)
