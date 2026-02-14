@@ -72,6 +72,7 @@ export class TeamsService {
                         user: { select: { id: true, nickname: true, avatarUrl: true } }
                     }
                 },
+                wonTournaments: { select: { id: true } },
                 _count: { select: { members: true } },
                 entries: {
                     include: {
@@ -119,9 +120,18 @@ export class TeamsService {
             }
         });
 
+        const tournamentsPlayed = team.entries.length;
+        const tournamentsWins = team.wonTournaments.length;
+        const winrate = tournamentsPlayed > 0 ? parseFloat(((tournamentsWins / tournamentsPlayed) * 100).toFixed(1)) : 0;
+
         return {
             ...team,
-            entries: mappedEntries
+            entries: mappedEntries,
+            stats: {
+                tournamentsPlayed,
+                tournamentsWins,
+                winrate,
+            }
         };
     }
 

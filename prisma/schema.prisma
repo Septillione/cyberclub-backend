@@ -106,6 +106,7 @@ model User {
   banReason          String?
   banExpires         DateTime?
   banHistories       BanHistory[]
+  wonTournaments     Tournament[]      @relation("TournamentWinnerUser")
 }
 
 model Tournament {
@@ -129,6 +130,10 @@ model Tournament {
   entries         TournamentEntry[]
   createdAt       DateTime          @default(now())
   matches         Match[]
+  winnerUserId    String?
+  winnerUser      User?             @relation("TournamentWinnerUser", fields: [winnerUserId], references: [id])
+  winnerTeamId    String?
+  winnerTeam      Team?             @relation("TournamentWinnerTeam", fields: [winnerTeamId], references: [id])
 }
 
 model TournamentEntry {
@@ -147,23 +152,24 @@ model TournamentEntry {
 }
 
 model Team {
-  id           String            @id @default(uuid())
-  name         String            @unique
-  tag          String            @unique
-  avatarUrl    String?
-  description  String?
-  socialMedia  String?
-  gamesList    String[]
-  ownerId      String
-  owner        User              @relation("TeamOwner", fields: [ownerId], references: [id])
-  members      TeamMember[]
-  entries      TournamentEntry[]
-  createdAt    DateTime          @default(now())
-  joinRequests JoinRequest[]
-  isBanned     Boolean           @default(false)
-  banReason    String?
-  banExpires   DateTime?
-  banHistories BanHistory[]
+  id             String            @id @default(uuid())
+  name           String            @unique
+  tag            String            @unique
+  avatarUrl      String?
+  description    String?
+  socialMedia    String?
+  gamesList      String[]
+  ownerId        String
+  owner          User              @relation("TeamOwner", fields: [ownerId], references: [id])
+  members        TeamMember[]
+  entries        TournamentEntry[]
+  createdAt      DateTime          @default(now())
+  joinRequests   JoinRequest[]
+  isBanned       Boolean           @default(false)
+  banReason      String?
+  banExpires     DateTime?
+  banHistories   BanHistory[]
+  wonTournaments Tournament[]      @relation("TournamentWinnerTeam")
 }
 
 model TeamMember {

@@ -392,22 +392,64 @@ export class TournamentsService {
 
         // 4. ПРОДВИГАЕМ ПОБЕДИТЕЛЯ (Самая важная часть!)
         // Если победитель определен И есть куда идти (nextMatchId не null)
-        if (winnerName && match.nextMatchId) {
+        // if (winnerName && match.nextMatchId) {
 
-            // Логика:
-            // Если позиция матча четная (0, 2, 4...) -> победитель идет в слот 1 (верхний) следующего матча
-            // Если позиция матча нечетная (1, 3, 5...) -> победитель идет в слот 2 (нижний) следующего матча
-            const isSlot1 = (match.position % 2 === 0);
+        //     // Логика:
+        //     // Если позиция матча четная (0, 2, 4...) -> победитель идет в слот 1 (верхний) следующего матча
+        //     // Если позиция матча нечетная (1, 3, 5...) -> победитель идет в слот 2 (нижний) следующего матча
+        //     const isSlot1 = (match.position % 2 === 0);
 
-            const updateData = isSlot1
-                ? { participant1: winnerName }
-                : { participant2: winnerName };
+        //     const updateData = isSlot1
+        //         ? { participant1: winnerName }
+        //         : { participant2: winnerName };
 
-            // Добавляем операцию обновления СЛЕДУЮЩЕГО матча
-            ops.push(this.prisma.match.update({
-                where: { id: match.nextMatchId },
-                data: updateData
-            }));
+        //     // Добавляем операцию обновления СЛЕДУЮЩЕГО матча
+        //     ops.push(this.prisma.match.update({
+        //         where: { id: match.nextMatchId },
+        //         data: updateData
+        //     }));
+        // }
+
+        if (winnerName) {
+            if (match.nextMatchId) {
+                const isSlot1 = (match.position % 2 === 0);
+                const updateData = isSlot1 ? { participant1: winnerName } : { participant2: winnerName };
+
+                ops.push(this.prisma.match.update({
+                    where: { id: match.nextMatchId },
+                    data: updateData
+                }));
+            } else {
+                if (match.tournament.teamMode === 'SOLO_1V1') {
+                    const winnerUser = await this.prisma.user.findUnique({
+                        where: { nickname: winnerName }
+                    });
+
+                    if (winnerUser) {
+                        ops.push(this.prisma.tournament.update({
+                            where: { id: match.tournamentId },
+                            data: {
+                                status: 'FINISHED',
+                                winnerUserId: winnerUser.id
+                            }
+                        }));
+                    }
+                } else {
+                    const winnerTeam = await this.prisma.team.findUnique({
+                        where: { name: winnerName }
+                    });
+
+                    if (winnerTeam) {
+                        ops.push(this.prisma.tournament.update({
+                            where: { id: match.tournamentId },
+                            data: {
+                                status: 'FINISHED',
+                                winnerTeamId: winnerTeam.id
+                            }
+                        }));
+                    }
+                }
+            }
         }
 
         // Выполняем всё вместе

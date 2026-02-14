@@ -64,15 +64,45 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id }
     });
-    if (!user) return null;
+
+    if (!user) throw new NotFoundException('Пользователь не найден');
 
     // Убираем секретные поля из ответа
     const { passwordHash, hashedRt, ...result } = user;
     return result;
   }
 
+  async getUserStats(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        entries: {
+          include: { tournament: true }
+        },
+        wonTournaments: true
+      }
+    });
+
+    if (!user) throw new NotFoundException('Пользователь не найден');
+
+    const tournamentsPlayed = user.entries.length;
+    const tournamentsWins = user.wonTournaments.length;
+    const winrate = tournamentsPlayed > 0 ? parseFloat(((tournamentsWins / tournamentsPlayed) * 100).toFixed(1)) : 0;
+
+    const { passwordHash, hashedRt, entries, wonTournaments, ...result } = user;
+
+    return {
+      ...result,
+      stats: {
+        tournamentsPlayed,
+        tournamentsWins,
+        winrate
+      }
+    };
+  }
+
   async updateProfile(userId: string, dto: UpdateUserDto) {
-    return this.prisma.user.update({
+    const user = await this.prisma.user.update({
       where: { id: userId },
       data: {
         bio: dto.bio,
@@ -80,6 +110,9 @@ export class UsersService {
         nickname: dto.nickname,
       },
     });
+
+    const { passwordHash, hashedRt, ...result } = user;
+    return result;
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto) {
