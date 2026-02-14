@@ -342,10 +342,6 @@ export class TeamsService {
             throw new NotFoundException('Команда не найдена');
         }
 
-        // if (team.ownerId !== userId) {
-        //     throw new ForbiddenException('Только капитан может обновлять информацию о команде');
-        // }
-
         const isOwner = team.ownerId === userId;
         const isAdmin = userRole === 'ADMIN';
 
@@ -366,5 +362,66 @@ export class TeamsService {
                 gamesList: dto.gamesList,
             }
         });
+    }
+
+    async promoteTeammate(captainId: string, teamId: string, teammateId: string) {
+        const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+
+        if (!team) {
+            throw new NotFoundException('Команда не найдена');
+        }
+
+        if (team.ownerId !== captainId) {
+            throw new ForbiddenException('Только капитан может передавать права');
+        }
+
+        const member = await this.prisma.teamMember.findUnique({
+            where: {
+                teamId_userId: {
+                    teamId: teamId,
+                    userId: teammateId,
+                }
+            }
+        });
+
+        if (!member) {
+            throw new BadRequestException('Этот пользователь не состоит в вашей команде')
+        }
+
+        return this.prisma.team.update({
+            where: { id: teamId },
+            data: {
+                ownerId: teammateId,
+            }
+        });
+    }
+
+    async kickTeammate(captainId: string, teamId: string, teammateId: string) {
+        const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+
+        if (!team) {
+            throw new NotFoundException('Команда не найдена');
+        }
+
+        if (team.ownerId !== captainId) {
+            throw new ForbiddenException('Только капитан может исключать игроков');
+        }
+
+        if (teammateId === captainId) {
+            throw new BadRequestException('Капитан не может исключить сам себя. Передайте права или удалите команду.');
+        }
+
+        try {
+            return await this.prisma.teamMember.delete({
+                where: {
+                    teamId_userId: {
+                        teamId: teamId,
+                        userId: teammateId,
+                    }
+                }
+            });
+        } catch (e) {
+            throw new NotFoundException('Пользователь не найден в команде');
+        }
     }
 }

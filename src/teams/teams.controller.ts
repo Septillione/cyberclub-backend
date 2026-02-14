@@ -49,12 +49,19 @@ export class TeamsController {
     return this.teamsService.inviteUser(req.user['sub'], teamId, targetUserId);
   }
 
-  // Временный прямой вход (если нужен)
-  // @UseGuards(AtGuard)
-  // @Post(':id/join')
-  // joinTeam(@Req() req, @Param('id') teamId: string) {
-  //   return this.teamsService.joinTeam(req.user['sub'], teamId);
-  // }
+  @UseGuards(AtGuard)
+  @Post(':id/promote')
+  promoteUser(@Req() req, @Param('id') teamId: string, @Body('userId') teammateId: string) {
+    const captainId = req.user['sub'];
+    return this.teamsService.promoteTeammate(captainId, teamId, teammateId);
+  }
+
+  @UseGuards(AtGuard)
+  @Post(':id/kick')
+  kickUser(@Req() req, @Param('id') teamId: string, @Body('userId') teammateId: string) {
+    const captainId = req.user['sub'];
+    return this.teamsService.kickTeammate(captainId, teamId, teammateId);
+  }
 
   @UseGuards(AtGuard)
   @Post(':id/leave')

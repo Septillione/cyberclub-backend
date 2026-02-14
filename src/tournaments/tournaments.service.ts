@@ -197,12 +197,18 @@ export class TournamentsService {
     async joinTournament(tournamentId: string, userId: string, teamId?: string, rosterIds?: string[]) {
         const tournament = await this.prisma.tournament.findUnique({
             where: { id: tournamentId },
-            include: { entries: true }
+            include: {
+                _count: {
+                    select: { entries: true }
+                }
+            }
         });
 
         if (!tournament) throw new NotFoundException('Турнир не найден');
         if (tournament.status !== 'REGISTRATION_OPEN') throw new BadRequestException('Регистрация закрыта');
-        if (tournament.entries.length >= tournament.maxParticipants) throw new BadRequestException('Мест больше нет');
+
+        const currentParticipants = tournament._count.entries;
+        if (currentParticipants >= tournament.maxParticipants) throw new BadRequestException('Мест больше нет');
 
         const existingEntry = await this.prisma.tournamentEntry.findFirst({
             where: { tournamentId, userId }
@@ -222,7 +228,7 @@ export class TournamentsService {
             const requiredCount = tournament.teamMode === 'DUO_2V2' ? 2 : tournament.teamMode === 'SQUAD' ? 4 : 5;
 
             if (!rosterIds || rosterIds.length !== requiredCount) {
-                throw new BadRequestException('Нужно выбрать ровно ${requiredCount} игроков');
+                throw new BadRequestException(`Нужно выбрать ровно ${requiredCount} игроков`);
             }
 
             const members = await this.prisma.teamMember.count({
@@ -237,14 +243,25 @@ export class TournamentsService {
             }
         }
 
-        return this.prisma.tournamentEntry.create({
-            data: {
-                tournamentId,
-                userId,
-                teamId: teamId || null,
-                rosterJson: rosterIds || [],
-                status: 'APPROVED',
+        return this.prisma.$transaction(async (tx) => {
+            const entry = await tx.tournamentEntry.create({
+                data: {
+                    tournamentId,
+                    userId,
+                    teamId: teamId || null,
+                    rosterJson: rosterIds || [],
+                    status: 'APPROVED',
+                }
+            });
+
+            if (currentParticipants + 1 >= tournament.maxParticipants) {
+                await tx.tournament.update({
+                    where: { id: tournamentId },
+                    data: { status: 'REGISTRATION_CLOSED' }
+                });
             }
+
+            return entry;
         });
     }
 
