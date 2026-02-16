@@ -78,6 +78,7 @@ enum TypeNotification {
   INVITE
   MATCH
   SYSTEM
+  INFO
 }
 
 enum BanType {

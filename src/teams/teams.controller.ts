@@ -4,6 +4,7 @@ import { AtGuard } from 'src/auth/guards/at.guard';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { UpdateTeamDto } from './dto/update-team.dto';
 import { TeamBanGuard } from 'src/ban/guard/team_ban.guard';
+import { request } from 'http';
 
 @Controller('teams')
 export class TeamsController {
@@ -101,46 +102,18 @@ export class TeamsController {
     const captainId = req.user['sub'];
     return this.teamsService.rejectRequest(requestId, captainId);
   }
+
+  @UseGuards(AtGuard)
+  @Post('invites/:id/accept')
+  acceptInvite(@Req() req, @Param('id') requestId: string) {
+    const userId = req.user['sub'];
+    return this.teamsService.acceptInvite(userId, requestId);
+  }
+
+  @UseGuards(AtGuard)
+  @Post('invites/:id/decline')
+  declineInvite(@Req() req, @Param('id') requestId: string) {
+    const userId = req.user['sub'];
+    return this.teamsService.declineInvite(userId, requestId);
+  }
 }
-
-// import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
-// import { TeamsService } from './teams.service';
-// import { AtGuard } from 'src/auth/guards/at.guard';
-// import { CreateTeamDto } from './dto/create-team.dto';
-
-// @Controller('teams')
-// export class TeamsController {
-//   constructor(private readonly teamsService: TeamsService) { }
-
-//   @UseGuards(AtGuard)
-//   @Post()
-//   create(@Req() req, @Body() dto: CreateTeamDto) {
-//     const userId = req.user['sub'];
-//     return this.teamsService.create(userId, dto);
-//   }
-
-//   @UseGuards(AtGuard)
-//   @Get('my')
-//   getMyTeams(@Req() req) {
-//     const userId = req.user['sub'];
-//     return this.teamsService.findAllMyTeams(userId);
-//   }
-
-//   @UseGuards(AtGuard)
-//   @Get(':id')
-//   findOne(@Param('id') id: string) {
-//     return this.teamsService.findOne(id);
-//   }
-
-//   @UseGuards(AtGuard)
-//   @Post(':id/join')
-//   joinTeam(@Req() req, @Param('id') teamId: string) {
-//     return this.teamsService.joinTeam(req.user['sub'], teamId);
-//   }
-
-//   @UseGuards(AtGuard)
-//   @Post(':id/leave')
-//   leaveTeam(@Req() req, @Param('id') teamId: string) {
-//     return this.teamsService.leaveTeam(req.user['sub'], teamId);
-//   }
-// }

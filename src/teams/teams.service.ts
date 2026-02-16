@@ -318,32 +318,141 @@ export class TeamsService {
     // Метод joinTeam (прямой вход) мы убираем или оставляем для тестов, 
     // так как у нас есть система заявок (requestJoin).
     // Если хочешь оставить "мгновенный вход" для отладки:
-    async joinTeam(userId: string, teamId: string) {
-        return this.prisma.teamMember.create({ data: { userId, teamId } });
-    }
+    // async joinTeam(userId: string, teamId: string) {
+    //     return this.prisma.teamMember.create({ data: { userId, teamId } });
+    // }
 
     async inviteUser(captainId: string, teamId: string, targetUserId: string) {
-        const team = await this.prisma.team.findUnique({ where: { id: teamId }, include: { members: true } });
+        const team = await this.prisma.team.findUnique({
+            where: { id: teamId },
+            include: { members: true }
+        });
+
         if (!team) throw new NotFoundException('Команда не найдена');
         if (team.ownerId !== captainId) throw new ForbiddenException('Только капитан может приглашать');
+        if (team.members.length >= 10) throw new BadRequestException('Команда переполнена');
 
         const existingMember = await this.prisma.teamMember.findUnique({
             where: { teamId_userId: { teamId, userId: targetUserId } }
         });
         if (existingMember) throw new ConflictException('Игрок уже в команде');
 
-        if (team.members.length >= 10) throw new BadRequestException('Команда переполнена');
+        const existingRequest = await this.prisma.joinRequest.findFirst({
+            where: {
+                teamId: teamId,
+                userId: targetUserId,
+                status: JoinRequestStatus.PENDING
+            }
+        });
+        if (existingRequest) throw new ConflictException('Приглашение уже отправлено');
+
+        const request = await this.prisma.joinRequest.create({
+            data: {
+                teamId: teamId,
+                userId: targetUserId,
+                status: JoinRequestStatus.PENDING
+            }
+        });
 
         await this.notifications.sendNotification(
             targetUserId,
             'Приглашение в команду',
             `Вы были приглашены в команду ${team.name}`,
-            'INVITE',
-            { teamId: team.id }
+            TypeNotification.INVITE,
+            {
+                requestId: request.id,
+                teamId: team.id,
+                teamName: team.name,
+                teamAvatar: team.avatarUrl
+            }
         );
 
         return { message: 'Приглашение отправлено' };
     }
+
+    async acceptInvite(userId: string, requestId: string) {
+        const request = await this.prisma.joinRequest.findUnique({
+            where: { id: requestId },
+            include: { team: { include: { members: true } }, user: true }
+        });
+
+        if (!request) throw new NotFoundException('Приглашение не найдено или удалено');
+        if (request.userId !== userId) throw new ForbiddenException('Это приглашение не для вас');
+        if (request.status !== JoinRequestStatus.PENDING) throw new BadRequestException('Приглашение уже обработано');
+
+        const userTeamsCount = await this.prisma.teamMember.count({ where: { userId } });
+        if (userTeamsCount >= 3) throw new BadRequestException('У вас максимальное кол-во команд (3)');
+        if (request.team.members.length >= 10) throw new BadRequestException('В команде уже нет мест');
+
+        await this.prisma.$transaction([
+            this.prisma.joinRequest.update({
+                where: { id: requestId },
+                data: { status: JoinRequestStatus.ACCEPTED }
+            }),
+            this.prisma.teamMember.create({
+                data: { userId, teamId: request.teamId }
+            }),
+        ]);
+
+        const notifications = await this.prisma.notification.findMany({
+            where: { userId, type: 'INVITE' }
+        });
+
+        for (const notif of notifications) {
+            const data = notif.data as any;
+            if (data && data.requestId == requestId) {
+                await this.prisma.notification.delete({ where: { id: notif.id } })
+            }
+        }
+
+        await this.notifications.sendNotification(
+            request.team.ownerId,
+            'Игрок в команде!',
+            `Пользователь ${request.user.nickname} принял ваше приглашение в команду ${request.team.name}`,
+            TypeNotification.INFO,
+            { teamId: request.teamId }
+        );
+
+        return { message: 'Вы успешно вступили в команду', team: request.team };
+    }
+
+    async declineInvite(userId: string, requestId: string) {
+        const request = await this.prisma.joinRequest.findUnique({
+            where: { id: requestId },
+            include: { team: true, user: true }
+        });
+
+        if (!request) throw new NotFoundException('Приглашение не найдено');
+        if (request.userId !== userId) throw new ForbiddenException('Это приглашение не для вас');
+        if (request.status !== JoinRequestStatus.PENDING) throw new BadRequestException('Приглашение уже обработано');
+
+        await this.prisma.joinRequest.update({
+            where: { id: requestId },
+            data: { status: JoinRequestStatus.REJECTED }
+        });
+
+        const notifications = await this.prisma.notification.findMany({
+            where: { userId, type: 'INVITE' }
+        });
+
+        for (const notif of notifications) {
+            const data = notif.data as any;
+            if (data && data.requestId == requestId) {
+                await this.prisma.notification.delete({ where: { id: notif.id } })
+            }
+        }
+
+        await this.notifications.sendNotification(
+            request.team.ownerId,
+            'Отказ',
+            `Пользователь ${request.user.nickname} отклонил приглашение в команду ${request.team.name}`,
+            TypeNotification.INFO,
+            { teamId: request.teamId }
+        );
+
+        return { message: 'Приглашение отклонено' };
+    }
+
 
     async updateTeam(userId: string, userRole: string, teamId: string, dto: UpdateTeamDto) {
         const team = await this.prisma.team.findUnique({ where: { id: teamId } });
