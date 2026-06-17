@@ -3,10 +3,12 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { ChangePasswordDto, UpdateUserDto } from './dto/update-user.dto';
+import { NotificationsService } from 'src/notifications/notifications.service';
+import { TypeNotification } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService, private notifications: NotificationsService) { }
 
   async create(createUserDto: CreateUserDto) {
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
@@ -55,7 +57,7 @@ export class UsersService {
 
     return this.prisma.user.findMany({
       where: where,
-      select: { id: true, nickname: true, avatarUrl: true, bio: true, role: true },
+      select: { id: true, nickname: true, avatarUrl: true, bio: true, role: true, isBanned: true },
       take: 50,
     });
   }
@@ -111,6 +113,15 @@ export class UsersService {
       },
     });
 
+    this.notifications.sendNotification(
+      userId,
+      'Изменение профиля',
+      'Вы успешно изменили данные профиля',
+      TypeNotification.SYSTEM,
+    ).catch(err => {
+      console.error('Ошибка отправки уведомления о профиле:', err);
+    });
+
     const { passwordHash, hashedRt, ...result } = user;
     return result;
   }
@@ -131,6 +142,17 @@ export class UsersService {
       where: { id: userId },
       data: { passwordHash: newHash },
     });
+
+    try {
+      await this.notifications.sendNotification(
+        userId,
+        'Смена пароля',
+        'Вы успешно сменили пароль',
+        TypeNotification.SYSTEM,
+      );
+    } catch (e) {
+      console.error('Не удалось отправить уведомление о смене пароля', e);
+    }
 
     return { message: 'Пароль успешно изменен' };
   }

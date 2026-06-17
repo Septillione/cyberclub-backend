@@ -1,14 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { TypeNotification } from '@prisma/client';
+import { NotificationsService } from 'src/notifications/notifications.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class BanService {
-    constructor(private prisma: PrismaService) { }
+    constructor(private prisma: PrismaService, private notifications: NotificationsService) { }
 
     async banUser(adminId: string, userId: string, reason: string, days?: number) {
         const expiresAt = days ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
 
-        return this.prisma.$transaction(async (tx) => {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId }
+        });
+
+        if (!user) throw new NotFoundException('Игрок не найден');
+
+        await this.prisma.$transaction(async (tx) => {
             await tx.banHistory.create({
                 data: {
                     userId,
@@ -29,10 +37,17 @@ export class BanService {
                 }
             });
         });
+
+        this.notifications.sendNotification(
+            adminId,
+            'Бан игрока',
+            `Игрок ${user.nickname} забанен`,
+            TypeNotification.SYSTEM,
+        ).catch(err => console.error(err));
     }
 
     async unbanUser(userId: string) {
-        return this.prisma.$transaction(async (tx) => {
+        await this.prisma.$transaction(async (tx) => {
             await tx.banHistory.updateMany({
                 where: { userId, isActive: true },
                 data: { isActive: false }
@@ -47,6 +62,12 @@ export class BanService {
 
     async banTeam(adminId: string, teamId: string, reason: string, days?: number) {
         const expiresAt = days ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
+
+        const team = await this.prisma.team.findUnique({
+            where: { id: teamId },
+        });
+
+        if (!team) throw new NotFoundException('Команда не найдена');
 
         await this.prisma.$transaction(async (tx) => {
             await tx.banHistory.create({
@@ -67,8 +88,15 @@ export class BanService {
                     banReason: reason,
                     banExpires: expiresAt,
                 }
-            })
-        })
+            });
+        });
+
+        this.notifications.sendNotification(
+            adminId,
+            'Бан команды',
+            `Команда ${team.name} забанена`,
+            TypeNotification.SYSTEM,
+        ).catch(err => console.error(err));
     }
 
     async unbanTeam(teamId: string) {

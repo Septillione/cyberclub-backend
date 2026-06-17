@@ -4,7 +4,7 @@ import { TeamsController } from './teams.controller';
 import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
-  imports: [NotificationsModule],
+  imports: [],
   controllers: [TeamsController],
   providers: [TeamsService],
 })

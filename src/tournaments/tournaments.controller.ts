@@ -55,7 +55,7 @@ export class TournamentsController {
   @Post(':id/join')
   join(@Req() req, @Param('id') tournamentId: string, @Body() dto: JoinTournamentDto) {
     const userId = req.user['sub'];
-    return this.tournamentsService.joinTournament(tournamentId, userId, dto.teamId);
+    return this.tournamentsService.joinTournament(tournamentId, userId, dto.teamId, dto.rosterIds);
   }
 
   @UseGuards(AtGuard)

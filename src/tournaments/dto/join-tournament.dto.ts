@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString } from "class-validator";
+import { IsArray, IsOptional, IsString, IsUUID } from "class-validator";
 
 export class JoinTournamentDto {
     @IsOptional()
@@ -7,6 +7,6 @@ export class JoinTournamentDto {
 
     @IsOptional()
     @IsArray()
-    @IsString({ each: true })
+    @IsUUID('4', { each: true })
     rosterIds?: string[];
 }

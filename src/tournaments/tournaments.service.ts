@@ -6,13 +6,58 @@ import * as crypto from 'crypto';
 import { FitlerTournamentsDto } from './dto/filter-tournaments.dto';
 import { UpdateTournamentDto } from './dto/update-tournament.dto';
 import { title } from 'process';
+import { NotificationsService } from 'src/notifications/notifications.service';
+import { TypeNotification } from '@prisma/client';
 
 
 @Injectable()
 export class TournamentsService {
-    constructor(private prisma: PrismaService) { }
+    constructor(private prisma: PrismaService, private notifications: NotificationsService) { }
+
+    // private mapTournamentDto(t: any) {
+    //     return {
+    //         id: t.id,
+    //         title: t.title,
+    //         imageUrl: t.imageUrl,
+    //         discipline: t.discipline,
+    //         status: t.status,
+    //         bracketType: t.bracketType,
+    //         teamMode: t.teamMode,
+    //         isOnline: t.isOnline,
+    //         address: t.address,
+    //         description: t.description,
+    //         rules: t.rules,
+    //         startDate: t.startDate.toISOString(),
+    //         participants: {
+    //             current: t._count?.entries ?? 0,
+    //             max: t.maxParticipants,
+    //         },
+    //         prizes: t.prizesJson || {},
+    //         creatorId: t.creatorId,
+    //         matches: t.matches || [],
+    //         entries: t.entries || [],
+    //     };
+    // }
 
     private mapTournamentDto(t: any) {
+        const mappedEntries = (t.entries || []).map(entry => ({
+            id: entry.id,
+            userId: entry.userId,
+            teamId: entry.teamId,
+            status: entry.status,
+            user: entry.user ? {
+                id: entry.user.id,
+                nickname: entry.user.nickname,
+                avatarUrl: entry.user.avatarUrl || null
+            } : null,
+            team: entry.team ? {
+                id: entry.team.id,
+                name: entry.team.name,
+                tag: entry.team.tag,
+                avatarUrl: entry.team.avatarUrl || null
+            } : null,
+        }));
+
         return {
             id: t.id,
             title: t.title,
@@ -25,20 +70,24 @@ export class TournamentsService {
             address: t.address,
             description: t.description,
             rules: t.rules,
-            startDate: t.startDate.toISOString(),
+            startDate: t.startDate ? t.startDate.toISOString() : new Date(0).toISOString(),
+
             participants: {
                 current: t._count?.entries ?? 0,
                 max: t.maxParticipants,
             },
-            prizes: t.prizesJson || {},
+            prizes: Array.isArray(t.prizesJson) ? t.prizesJson : [],
             creatorId: t.creatorId,
             matches: t.matches || [],
-            entries: t.entries || [],
+            entries: mappedEntries,
+            createdAt: t.createdAt ? t.createdAt.toISOString() : new Date().toISOString(),
         };
     }
 
+
+
     async createTournament(dto: CreateTournamentDto, userId: string) {
-        return this.prisma.tournament.create({
+        const tournament = await this.prisma.tournament.create({
             data: {
                 title: dto.title,
                 description: dto.description,
@@ -55,111 +104,157 @@ export class TournamentsService {
                 creatorId: userId,
                 status: 'REGISTRATION_OPEN',
             }
-        })
+        });
+
+        this.notifications.sendNotification(
+            userId,
+            'Создание турнира',
+            `Турнир ${tournament.title} успешно создан`,
+            TypeNotification.SYSTEM,
+        ).catch(err => console.error(err));
+
+        return tournament;
     }
 
     async findAll(filters: FitlerTournamentsDto) {
+        try {
+            const { discipline, status, teamMode, search, isOnline, sortOrder } = filters;
 
-        const { discipline, status, teamMode, search, isOnline, sortOrder } = filters;
-
-        console.log('--- START FILTER DEBUG ---');
-        console.log('Raw Filters received:', filters);
+            console.log('--- START FILTER DEBUG ---');
+            console.log('Raw Filters received:', filters);
 
 
-        const where: any = {};
+            const where: any = {};
 
-        if (discipline) where.discipline = discipline;
-        if (status) where.status = status;
-        if (teamMode) where.teamMode = teamMode;
-        if (isOnline !== undefined) where.isOnline = isOnline;
+            if (discipline) where.discipline = discipline;
+            if (status) where.status = status;
+            if (teamMode) where.teamMode = teamMode;
+            if (isOnline !== undefined) where.isOnline = isOnline;
 
-        if (search && search.trim().length > 0) {
-            const cleanSearch = search.trim();
+            if (search && search.trim().length > 0) {
+                const cleanSearch = search.trim();
 
-            if (!where.AND) where.AND = [];
+                if (!where.AND) where.AND = [];
 
-            if (cleanSearch.length < 3) {
-                where.AND.push({
-                    title: { contains: cleanSearch, mode: 'insensitive' }
-                });
-            } else {
-                const trigrams: string[] = [];
+                if (cleanSearch.length < 3) {
+                    where.AND.push({
+                        title: { contains: cleanSearch, mode: 'insensitive' }
+                    });
+                } else {
+                    const trigrams: string[] = [];
 
-                for (let i = 0; i < cleanSearch.length - 2; i++) {
-                    trigrams.push(cleanSearch.substring(i, i + 3));
+                    for (let i = 0; i < cleanSearch.length - 2; i++) {
+                        trigrams.push(cleanSearch.substring(i, i + 3));
+                    }
+
+                    where.AND.push({
+                        OR: trigrams.map(chunk => ({
+                            title: { contains: chunk, mode: 'insensitive' }
+                        }))
+                    });
                 }
-
-                where.AND.push({
-                    OR: trigrams.map(chunk => ({
-                        title: { contains: chunk, mode: 'insensitive' }
-                    }))
-                });
             }
+
+            console.log('Constructed WHERE:', JSON.stringify(where, null, 2));
+            console.log('--- END FILTER DEBUG ---');
+
+            let orderBy: any = { startDate: 'asc' };
+            if (sortOrder === 'NEWEST') orderBy = { startDate: 'desc' };
+            else if (sortOrder === 'OLDEST') orderBy = { startDate: 'asc' };
+            else if (sortOrder === 'POPULAR') orderBy = { entries: { _count: 'desc' } };
+
+            const tournaments = await this.prisma.tournament.findMany({
+                where: where,
+                include: {
+                    _count: { select: { entries: true } },
+                    matches: true,
+                    entries: { include: { user: true, team: true } }
+                },
+                orderBy: orderBy,
+            });
+
+            return tournaments.map(this.mapTournamentDto);
+        } catch (error) { // ✅ Ловим ошибку
+            console.error('!!! ERROR IN FIND ALL !!!', error);
+            throw error;
         }
-
-        console.log('Constructed WHERE:', JSON.stringify(where, null, 2));
-        console.log('--- END FILTER DEBUG ---');
-
-        let orderBy: any = { startDate: 'asc' };
-        if (sortOrder === 'NEWEST') orderBy = { startDate: 'desc' };
-        else if (sortOrder === 'OLDEST') orderBy = { startDate: 'asc' };
-        else if (sortOrder === 'POPULAR') orderBy = { entries: { _count: 'desc' } };
-
-        const tournaments = await this.prisma.tournament.findMany({
-            where: where,
-            include: {
-                _count: { select: { entries: true } },
-                matches: true,
-                entries: { include: { user: true, team: true } }
-            },
-            orderBy: orderBy,
-        });
-
-        return tournaments.map(this.mapTournamentDto);
     }
 
     async findOne(id: string) {
-        const t = await this.prisma.tournament.findUnique({
-            where: { id },
-            include: {
-                _count: { select: { entries: true } },
-                entries: {
-                    select: {
-                        id: true,
-                        userId: true,
-                        teamId: true,
-                        status: true,
-                        user: { select: { id: true, nickname: true, avatarUrl: true } },
-                        team: { select: { id: true, name: true, tag: true, avatarUrl: true } }
-                    }
+        try {
+            const t = await this.prisma.tournament.findUnique({
+                where: { id },
+                include: {
+                    _count: { select: { entries: true } },
+                    entries: {
+                        select: {
+                            id: true,
+                            userId: true,
+                            teamId: true,
+                            status: true,
+                            user: { select: { id: true, nickname: true, avatarUrl: true } },
+                            team: { select: { id: true, name: true, tag: true, avatarUrl: true } }
+                        }
+                    },
+                    matches: true
                 },
-                matches: true
-            },
-        });
-        if (!t) return null;
+            });
+            if (!t) return null;
 
-        return {
-            id: t.id,
-            title: t.title,
-            imageUrl: t.imageUrl,
-            discipline: t.discipline,
-            status: t.status,
-            bracketType: t.bracketType,
-            teamMode: t.teamMode,
-            isOnline: t.isOnline,
-            address: t.address,
-            description: t.description,
-            rules: t.rules,
-            startDate: t.startDate.toISOString(),
-            participants: {
-                current: t._count.entries,
-                max: t.maxParticipants,
-            },
-            prizes: t.prizesJson || {},
-            entries: t.entries,
-            matches: t.matches,
-            creatorId: t.creatorId,
-            createdAt: t.createdAt.toISOString(),
+            console.log('--- FIND ONE DEBUG ---');
+            console.log('Prizes from DB:', t.prizesJson);
+            console.log('CreatedAt from DB:', t.createdAt);
+            console.log('----------------------');
+
+
+            const mappedEntries = t.entries.map(entry => ({
+                id: entry.id,
+                userId: entry.userId,
+                teamId: entry.teamId,
+                status: entry.status,
+                // Безопасно обрабатываем null, если user или team не найдены
+                user: entry.user ? {
+                    id: entry.user.id,
+                    nickname: entry.user.nickname,
+                    avatarUrl: entry.user.avatarUrl || null
+                } : null,
+                team: entry.team ? {
+                    id: entry.team.id,
+                    name: entry.team.name,
+                    tag: entry.team.tag,
+                    avatarUrl: entry.team.avatarUrl || null
+                } : null,
+            }));
+
+
+            return {
+                id: t.id,
+                title: t.title,
+                imageUrl: t.imageUrl,
+                discipline: t.discipline,
+                status: t.status,
+                bracketType: t.bracketType,
+                teamMode: t.teamMode,
+                isOnline: t.isOnline,
+                address: t.address,
+                description: t.description,
+                rules: t.rules,
+                startDate: t.startDate.toISOString(),
+                participants: {
+                    current: t._count.entries,
+                    max: t.maxParticipants,
+                },
+                prizes: Array.isArray(t.prizesJson) ? t.prizesJson : [],
+                entries: mappedEntries,
+                matches: t.matches,
+                creatorId: t.creatorId,
+                createdAt: t.createdAt ? t.createdAt.toISOString() : new Date(0).toISOString(),
+            }
+        } catch (error) {
+            // ✅ Ловим любую ошибку и выводим в консоль
+            console.error('!!! ERROR IN FIND ONE !!!', error);
+            // Выбрасываем ошибку дальше, чтобы Nest.js ее обработал
+            throw error;
         }
     }
 
@@ -218,6 +313,15 @@ export class TournamentsService {
         if (tournament.teamMode !== 'SOLO_1V1') {
             if (!teamId) throw new BadRequestException('Для этого турнира нужно выбрать команду');
             const team = await this.prisma.team.findUnique({ where: { id: teamId } });
+            console.log('--- JOIN TOURNAMENT DEBUG ---');
+            console.log('User ID from token:', userId);
+            console.log('Team ID from request:', teamId);
+            console.log('Team Owner ID from DB:', team?.ownerId);
+            console.log('Is user the owner?', team?.ownerId === userId);
+            console.log('Received rosterIds:', rosterIds); // <-- Очень важный лог
+            console.log('-----------------------------');
+
+
             if (!team || team.ownerId !== userId) throw new ForbiddenException('Вы должны быть капитаном для регистрации');
 
             const teamEntry = await this.prisma.tournamentEntry.findFirst({
@@ -243,13 +347,14 @@ export class TournamentsService {
             }
         }
 
-        return this.prisma.$transaction(async (tx) => {
+        await this.prisma.$transaction(async (tx) => {
             const entry = await tx.tournamentEntry.create({
                 data: {
                     tournamentId,
                     userId,
                     teamId: teamId || null,
-                    rosterJson: rosterIds || [],
+                    // rosterJson: rosterIds || [],
+                    rosterJson: JSON.stringify(rosterIds || []),
                     status: 'APPROVED',
                 }
             });
@@ -263,6 +368,28 @@ export class TournamentsService {
 
             return entry;
         });
+
+        this.notifications.sendNotification(
+            userId,
+            'Участие в турнире',
+            `Ваша заявка принята. Турнир: ${tournament.title}`,
+            TypeNotification.SYSTEM,
+        ).catch(console.error);
+
+        if (teamId && rosterIds && rosterIds.length > 0) {
+            const teammatesToNotify = rosterIds.filter(id => id !== userId);
+
+            for (const memberId of teammatesToNotify) {
+                this.notifications.sendNotification(
+                    memberId,
+                    'Турнир!',
+                    `Капитан зарегистрировал вашу команду в турнире ${tournament.title}`,
+                    TypeNotification.INFO,
+                ).catch(console.error);
+            }
+        }
+
+        return { message: 'Вы успешно зарегистрированы' };
     }
 
     private shuffle(array: any[]) {
@@ -355,6 +482,13 @@ export class TournamentsService {
         }
 
         await this.prisma.$transaction(dbOperaions);
+
+        this.notifications.sendNotification(
+            userId,
+            'Запуск турнира',
+            `Турнир ${tournament.title} успешно запущен`,
+            TypeNotification.SYSTEM,
+        ).catch(err => console.error(err));
 
         return { message: 'Турнир запущен, полная сетка создана' };
     }
@@ -455,6 +589,13 @@ export class TournamentsService {
         // Выполняем всё вместе
         await this.prisma.$transaction(ops);
 
+        this.notifications.sendNotification(
+            userId,
+            'Обновление матча',
+            `Счёт матча турнира ${match.tournament.title} успешно обновлён`,
+            TypeNotification.SYSTEM,
+        ).catch(err => console.error(err));
+
         return { message: 'Счет обновлен, сетка пересчитана' };
     }
 
@@ -504,6 +645,13 @@ export class TournamentsService {
 
         await this.prisma.$transaction(ops);
 
+        this.notifications.sendNotification(
+            userId,
+            'Дисквалификация игрока',
+            `Участник дисквалифицирован, соперник прошел дальше`,
+            TypeNotification.SYSTEM,
+        ).catch(err => console.error(err));
+
         return { message: 'Участник дисквалифицирован, соперник прошел дальше' };
     }
 
@@ -516,14 +664,21 @@ export class TournamentsService {
         if (tournament.creatorId !== userId) throw new ForbiddenException('Только организатор может завершить турнир');
         if (tournament.status !== 'LIVE') throw new BadRequestException('Турнир не запущен');
 
-        return this.prisma.tournament.update({
+        await this.prisma.tournament.update({
             where: { id: tournamentId },
             data: { status: 'FINISHED' },
         });
+
+        this.notifications.sendNotification(
+            userId,
+            'Завершение турнира',
+            `Турнир ${tournament.title} успешно завершён`,
+            TypeNotification.SYSTEM,
+        ).catch(err => console.error(err));
     }
 
     async cancelTournament(tournamentId: string) {
-        return this.prisma.tournament.update({
+        await this.prisma.tournament.update({
             where: {
                 id: tournamentId
             },
@@ -628,12 +783,19 @@ export class TournamentsService {
                 delete dataToUpdate.prizes;
             }
 
-            return this.prisma.tournament.update({
+            await this.prisma.tournament.update({
                 where: { id: tournamentId },
                 data: dataToUpdate,
             })
         } catch (e) {
             throw new BadRequestException('Ошибка обновления турнира: ' + e.message);
         }
+
+        this.notifications.sendNotification(
+            userId,
+            'Изменение турнира',
+            `Турнир ${tournament.title} успешно изменён`,
+            TypeNotification.SYSTEM,
+        ).catch(err => console.error(err));
     }
 }

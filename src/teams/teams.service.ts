@@ -28,7 +28,7 @@ export class TeamsService {
         });
         if (existing) throw new ConflictException('Команда с таким именем или тегом уже существует');
 
-        return this.prisma.team.create({
+        const team = await this.prisma.team.create({
             data: {
                 name: dto.name,
                 tag: dto.tag,
@@ -37,13 +37,21 @@ export class TeamsService {
                 gamesList: dto.gamesList,
                 avatarUrl: dto.avatarUrl,
                 ownerId: userId,
-                // Сразу добавляем создателя в список участников
                 members: {
                     create: { userId: userId },
                 },
             },
             include: { members: { include: { user: true } } },
         });
+
+        this.notifications.sendNotification(
+            userId,
+            'Создание команды',
+            `Команда ${team.name} успешно создана`,
+            TypeNotification.SYSTEM
+        ).catch(err => console.error(err));
+
+        return team;
     }
 
     async findAllMyTeams(userId: string) {
@@ -170,7 +178,19 @@ export class TeamsService {
         return this.prisma.team.findMany({
             where: where,
             include: {
-                _count: { select: { members: true } }
+                _count: { select: { members: true } },
+                members: {
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                nickname: true,
+                                avatarUrl: true,
+                                isBanned: true,
+                            }
+                        }
+                    }
+                }
             },
             take: 20,
         });
@@ -253,15 +273,24 @@ export class TeamsService {
 
         if (team.members.length >= 10) throw new BadRequestException('Команда переполнена');
 
-        return this.prisma.$transaction([
+        await this.prisma.$transaction([
             this.prisma.joinRequest.update({
                 where: { id: requestId },
                 data: { status: JoinRequestStatus.ACCEPTED }
             }),
             this.prisma.teamMember.create({
                 data: { userId: request.userId, teamId: request.teamId }
-            })
-        ])
+            }),
+        ]);
+
+        this.notifications.sendNotification(
+            request.userId,
+            'Заявка на вступление',
+            `Команда ${team.name} приняла вашу заявку на вступление`,
+            TypeNotification.INVITE,
+        ).catch(err => { console.error('Notification error:', err) });
+
+        return { message: 'Игрок принят' };
     }
 
     async rejectRequest(requestId: string, captainId: string) {
@@ -272,29 +301,48 @@ export class TeamsService {
 
         if (!request || request.team.ownerId !== captainId) throw new ForbiddenException('Только капитан может отклонять заявки');
 
-        return this.prisma.joinRequest.update({
+        await this.prisma.joinRequest.update({
             where: { id: requestId },
             data: { status: JoinRequestStatus.REJECTED }
-        })
+        });
+
+        this.notifications.sendNotification(
+            request.userId,
+            'Заявка на вступление',
+            `Команда ${request.team.name} не приняла вашу заявку на вступление`,
+            TypeNotification.INVITE,
+        ).catch(err => { console.error('Notification error:', err) });
+
+        return { message: 'Игрок не принят' };
     }
 
-    // Выход / Удаление (доп. методы)
     async leaveTeam(userId: string, teamId: string) {
         const team = await this.prisma.team.findUnique({ where: { id: teamId } });
 
-        // 1. Сначала проверяем, нашлась ли команда
         if (!team) {
             throw new NotFoundException('Команда не найдена');
         }
 
-        // 2. Теперь TypeScript знает, что team точно не null, и ошибка пропадет
         if (team.ownerId === userId) {
             throw new ForbiddenException('Капитан не может покинуть команду. Передайте права или удалите команду.');
         }
 
-        return this.prisma.teamMember.delete({
+        await this.prisma.teamMember.delete({
             where: { teamId_userId: { teamId, userId } }
         });
+
+        try {
+            await this.notifications.sendNotification(
+                userId,
+                'Выход из команды',
+                `Вы покинули команду ${team.name}`,
+                TypeNotification.SYSTEM,
+            );
+        } catch (e) {
+            console.error('Не удалось отправить уведомление', e);
+        }
+
+        return { message: 'Игрок покинул команду' };
     }
 
     async deleteTeam(userId: string, teamId: string) {
@@ -312,15 +360,21 @@ export class TeamsService {
             this.prisma.joinRequest.deleteMany({ where: { teamId } }),
             this.prisma.teamMember.deleteMany({ where: { teamId } }),
             this.prisma.team.delete({ where: { id: teamId } }),
-        ])
-    }
+        ]);
 
-    // Метод joinTeam (прямой вход) мы убираем или оставляем для тестов, 
-    // так как у нас есть система заявок (requestJoin).
-    // Если хочешь оставить "мгновенный вход" для отладки:
-    // async joinTeam(userId: string, teamId: string) {
-    //     return this.prisma.teamMember.create({ data: { userId, teamId } });
-    // }
+        try {
+            await this.notifications.sendNotification(
+                userId,
+                'Удаление команды',
+                `Вы удалили команду ${team.name}`,
+                TypeNotification.SYSTEM,
+            );
+        } catch (e) {
+            console.error('Не удалось отправить уведомление', e);
+        }
+
+        return { message: 'Игрок удалил команду' };
+    }
 
     async inviteUser(captainId: string, teamId: string, targetUserId: string) {
         const team = await this.prisma.team.findUnique({
@@ -394,16 +448,27 @@ export class TeamsService {
             }),
         ]);
 
-        const notifications = await this.prisma.notification.findMany({
-            where: { userId, type: 'INVITE' }
-        });
+        // const notifications = await this.prisma.notification.findMany({
+        //     where: { userId, type: 'INVITE' }
+        // });
 
-        for (const notif of notifications) {
-            const data = notif.data as any;
-            if (data && data.requestId == requestId) {
-                await this.prisma.notification.delete({ where: { id: notif.id } })
+        // for (const notif of notifications) {
+        //     const data = notif.data as any;
+        //     if (data && data.requestId == requestId) {
+        //         await this.prisma.notification.delete({ where: { id: notif.id } })
+        //     }
+        // }
+
+        await this.prisma.notification.deleteMany({
+            where: {
+                userId,
+                type: 'INVITE',
+                data: {
+                    path: ['requestId'],
+                    equals: requestId,
+                }
             }
-        }
+        });
 
         await this.notifications.sendNotification(
             request.team.ownerId,
@@ -411,7 +476,7 @@ export class TeamsService {
             `Пользователь ${request.user.nickname} принял ваше приглашение в команду ${request.team.name}`,
             TypeNotification.INFO,
             { teamId: request.teamId }
-        );
+        ).catch(err => console.error(err));
 
         return { message: 'Вы успешно вступили в команду', team: request.team };
     }
@@ -431,16 +496,27 @@ export class TeamsService {
             data: { status: JoinRequestStatus.REJECTED }
         });
 
-        const notifications = await this.prisma.notification.findMany({
-            where: { userId, type: 'INVITE' }
-        });
+        // const notifications = await this.prisma.notification.findMany({
+        //     where: { userId, type: 'INVITE' }
+        // });
 
-        for (const notif of notifications) {
-            const data = notif.data as any;
-            if (data && data.requestId == requestId) {
-                await this.prisma.notification.delete({ where: { id: notif.id } })
+        // for (const notif of notifications) {
+        //     const data = notif.data as any;
+        //     if (data && data.requestId == requestId) {
+        //         await this.prisma.notification.delete({ where: { id: notif.id } })
+        //     }
+        // }
+
+        await this.prisma.notification.deleteMany({
+            where: {
+                userId,
+                type: 'INVITE',
+                data: {
+                    path: ['requestId'],
+                    equals: requestId,
+                }
             }
-        }
+        });
 
         await this.notifications.sendNotification(
             request.team.ownerId,
@@ -448,7 +524,7 @@ export class TeamsService {
             `Пользователь ${request.user.nickname} отклонил приглашение в команду ${request.team.name}`,
             TypeNotification.INFO,
             { teamId: request.teamId }
-        );
+        ).catch(err => console.error(err));
 
         return { message: 'Приглашение отклонено' };
     }
@@ -470,7 +546,7 @@ export class TeamsService {
             );
         }
 
-        return this.prisma.team.update({
+        await this.prisma.team.update({
             where: { id: teamId },
             data: {
                 name: dto.name,
@@ -480,6 +556,15 @@ export class TeamsService {
                 socialMedia: dto.socialMedia,
                 gamesList: dto.gamesList,
             }
+        });
+
+        this.notifications.sendNotification(
+            userId,
+            'Изменение команды',
+            `Вы успешно изменили данные команды ${team.name}`,
+            TypeNotification.SYSTEM,
+        ).catch(err => {
+            console.error('Ошибка отправки уведомления:', err);
         });
     }
 
@@ -507,11 +592,29 @@ export class TeamsService {
             throw new BadRequestException('Этот пользователь не состоит в вашей команде')
         }
 
-        return this.prisma.team.update({
+        await this.prisma.team.update({
             where: { id: teamId },
             data: {
                 ownerId: teammateId,
             }
+        });
+
+        this.notifications.sendNotification(
+            captainId,
+            'Передача прав',
+            `Вы передали права капитана команды ${team.name}`,
+            TypeNotification.SYSTEM,
+        ).catch(err => {
+            console.error('Ошибка отправки уведомления:', err);
+        });
+
+        this.notifications.sendNotification(
+            teammateId,
+            'Передача прав',
+            `Вам передали права капитана команды ${team.name}`,
+            TypeNotification.INFO,
+        ).catch(err => {
+            console.error('Ошибка отправки уведомления:', err);
         });
     }
 
@@ -530,17 +633,36 @@ export class TeamsService {
             throw new BadRequestException('Капитан не может исключить сам себя. Передайте права или удалите команду.');
         }
 
-        try {
-            return await this.prisma.teamMember.delete({
-                where: {
-                    teamId_userId: {
-                        teamId: teamId,
-                        userId: teammateId,
-                    }
+        const member = await this.prisma.teamMember.findUnique({
+            where: { teamId_userId: { teamId, userId: teammateId } }
+        });
+        if (!member) throw new NotFoundException('Игрок не найден в команде');
+
+        await this.prisma.teamMember.delete({
+            where: {
+                teamId_userId: {
+                    teamId: teamId,
+                    userId: teammateId,
                 }
-            });
-        } catch (e) {
-            throw new NotFoundException('Пользователь не найден в команде');
-        }
+            }
+        });
+
+        this.notifications.sendNotification(
+            captainId,
+            'Исключение игрока',
+            `Вы исключили игрока команды ${team.name}`,
+            TypeNotification.SYSTEM,
+        ).catch(err => {
+            console.error('Ошибка отправки уведомления:', err);
+        });
+
+        this.notifications.sendNotification(
+            teammateId,
+            'Исключение из комнады',
+            `Вас исключили из команды ${team.name}`,
+            TypeNotification.INFO,
+        ).catch(err => {
+            console.error('Ошибка отправки уведомления:', err);
+        });
     }
 }
