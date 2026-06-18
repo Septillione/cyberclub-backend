@@ -554,35 +554,35 @@ export class TournamentsService {
                     data: updateData
                 }));
             } else {
-                if (match.tournament.teamMode === 'SOLO_1V1') {
-                    const winnerUser = await this.prisma.user.findUnique({
-                        where: { nickname: winnerName }
-                    });
+                // if (match.tournament.teamMode === 'SOLO_1V1') {
+                //     const winnerUser = await this.prisma.user.findUnique({
+                //         where: { nickname: winnerName }
+                //     });
 
-                    if (winnerUser) {
-                        ops.push(this.prisma.tournament.update({
-                            where: { id: match.tournamentId },
-                            data: {
-                                status: 'FINISHED',
-                                winnerUserId: winnerUser.id
-                            }
-                        }));
-                    }
-                } else {
-                    const winnerTeam = await this.prisma.team.findUnique({
-                        where: { name: winnerName }
-                    });
+                //     if (winnerUser) {
+                //         ops.push(this.prisma.tournament.update({
+                //             where: { id: match.tournamentId },
+                //             data: {
+                //                 status: 'FINISHED',
+                //                 winnerUserId: winnerUser.id
+                //             }
+                //         }));
+                //     }
+                // } else {
+                //     const winnerTeam = await this.prisma.team.findUnique({
+                //         where: { name: winnerName }
+                //     });
 
-                    if (winnerTeam) {
-                        ops.push(this.prisma.tournament.update({
-                            where: { id: match.tournamentId },
-                            data: {
-                                status: 'FINISHED',
-                                winnerTeamId: winnerTeam.id
-                            }
-                        }));
-                    }
-                }
+                //     if (winnerTeam) {
+                //         ops.push(this.prisma.tournament.update({
+                //             where: { id: match.tournamentId },
+                //             data: {
+                //                 status: 'FINISHED',
+                //                 winnerTeamId: winnerTeam.id
+                //             }
+                //         }));
+                //     }
+                // }
             }
         }
 
@@ -655,6 +655,70 @@ export class TournamentsService {
         return { message: 'Участник дисквалифицирован, соперник прошел дальше' };
     }
 
+    // async finishTournament(tournamentId: string, userId: string) {
+    //     const tournament = await this.prisma.tournament.findUnique({
+    //         where: { id: tournamentId },
+    //     });
+
+    //     if (!tournament) throw new NotFoundException('Турнир не найден');
+    //     if (tournament.creatorId !== userId) throw new ForbiddenException('Только организатор может завершить турнир');
+    //     if (tournament.status !== 'LIVE') throw new BadRequestException('Турнир не запущен');
+
+    //     await this.prisma.tournament.update({
+    //         where: { id: tournamentId },
+    //         data: { status: 'FINISHED' },
+    //     });
+
+    //     this.notifications.sendNotification(
+    //         userId,
+    //         'Завершение турнира',
+    //         `Турнир ${tournament.title} успешно завершён`,
+    //         TypeNotification.SYSTEM,
+    //     ).catch(err => console.error(err));
+    // }
+
+    // async finishTournament(tournamentId: string, userId: string) {
+    //     const tournament = await this.prisma.tournament.findUnique({
+    //         where: { id: tournamentId },
+    //         include: { matches: true }
+    //     });
+
+    //     if (!tournament) throw new NotFoundException('Турнир не найден');
+    //     if (tournament.creatorId !== userId) throw new ForbiddenException('Только организатор может завершить турнир');
+    //     if (tournament.status !== 'LIVE') throw new BadRequestException('Турнир не запущен');
+
+    //     const finalMatch = tournament.matches.find(m => m.nextMatchId === null);
+
+    //     let winnerUserId: string | null = null;
+    //     let winnerTeamId: string | null = null;
+
+    //     if (finalMatch && finalMatch.winnerId) {
+    //         if (tournament.teamMode === 'SOLO_1V1') {
+    //             winnerUserId = finalMatch.winnerId;
+    //         } else {
+    //             winnerTeamId = finalMatch.winnerId;
+    //         }
+    //     }
+
+    //     await this.prisma.tournament.update({
+    //         where: { id: tournamentId },
+    //         data: {
+    //             status: 'FINISHED',
+    //             winnerUserId: winnerUserId,
+    //             winnerTeamId: winnerTeamId
+    //         },
+    //     });
+
+    //     this.notifications.sendNotification(
+    //         userId,
+    //         'Завершение турнира',
+    //         `Турнир ${tournament.title} успешно завершён`,
+    //         TypeNotification.SYSTEM,
+    //     ).catch(err => console.error(err));
+
+    //     return { message: 'Турнир завершён' };
+    // }
+
     async finishTournament(tournamentId: string, userId: string) {
         const tournament = await this.prisma.tournament.findUnique({
             where: { id: tournamentId },
@@ -664,6 +728,7 @@ export class TournamentsService {
         if (tournament.creatorId !== userId) throw new ForbiddenException('Только организатор может завершить турнир');
         if (tournament.status !== 'LIVE') throw new BadRequestException('Турнир не запущен');
 
+        // Просто меняем статус на FINISHED
         await this.prisma.tournament.update({
             where: { id: tournamentId },
             data: { status: 'FINISHED' },
@@ -675,6 +740,8 @@ export class TournamentsService {
             `Турнир ${tournament.title} успешно завершён`,
             TypeNotification.SYSTEM,
         ).catch(err => console.error(err));
+
+        return { message: 'Турнир завершён' };
     }
 
     async cancelTournament(tournamentId: string) {
